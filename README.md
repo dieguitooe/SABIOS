@@ -2,8 +2,6 @@
 SABIOS (Simulator for Agent-Based I/O System)
 The SABIOS tool is a simulator based on the ABMS paradigm, developed with the NetLogo framework, which allows different infrastructure configurations and software components to be evaluated in order to identify possible behaviours of the I/O system in HPC environments, focusing in this case on the PVFS2 parallel file system. It is the result of a doctoral thesis carried out in collaboration between the Autonomous University of Barcelona and the National University of La Plata.
 
-Translated with DeepL.com (free version)
-
 Among the publications derived from the development of SABIOS, the following stand out:
 
 1. • “On the Calibration, Verification and Validation of an Agent-Based Model of the HPC Input/Output System”. Diego Encinas, Marcelo Naiouf, Armando De Giusti, Sandra Mendez, Dolores Rexachs, Emilio Luque. The Eleventh International Conference on Advances in System Simulation (SIMUL 2019). Pages: 14 - 21. November 2019. Valencia, Spain. ISBN 978-1-61208-756-6
