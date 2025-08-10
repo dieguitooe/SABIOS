@@ -4,6 +4,6 @@ The SABIOS tool is a simulator developed with the NetLogo framework under the AB
 
 Among the publications derived from the development of SABIOS, the following stand out:
 
-1. • Point 1  
-2. • Point 2  
-3. • Point 3
+1. • “On the Calibration, Verification and Validation of an Agent-Based Model of the HPC Input/Output System”. Diego Encinas, Marcelo Naiouf, Armando De Giusti, Sandra Mendez, Dolores Rexachs, Emilio Luque. The Eleventh International Conference on Advances in System Simulation (SIMUL 2019). Pages: 14 - 21. November 2019. Valencia, Spain. ISBN 978-1-61208-756-6
+2. • "An Agent-Based Model for Analysing the HPC Input/Output System”. Diego Encinas, Sandra Mendez, Marcelo Naiouf, Armando De Giusti, Dolores Rexachs del Rosario, Emilio Luque. International Journal on Advances in Systems and Measurements. December 2020. Vol 13, nro 3 & 4. Pages: 192- 202. ISSN: 1942-261x
+3. • “Agent Based Simulation as an Efficient Way for HPC I/O System Tunning”. Diego Encinas, Marcelo Naiouf, Armando De Giusti, Roman Bond, Sandra Mendez, Dolores Rexachs, Emilio Luque. 24th International Conference on Computational Science (ICCS 2024). Lecture Notes in Computer Science. Vol 14834. Pages: 129 - 136. Springer. July 2024. Malaga, Spain. ISBN 978-3-031-63759-9
