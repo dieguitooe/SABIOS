@@ -1,0 +1,41 @@
+to escribir_output
+  file-open "output.txt"
+;  set id_app origen
+;  if capa = "APP" [set id_app [who] of myself]
+ 
+  
+  foreach funciones_tiempos [ 
+    set time_function lput tiempo time_function
+    file-write [who] of myself
+    file-write  word "Nodo" id_app
+    file-write capa
+    file-write  ?
+    file-write (word tiempo)
+    file-print ";"
+  ]
+  file-close
+end
+
+to abrir_times[name_capa  name_function]
+  let capa_list ["BMI-S" "JOB-S" "FLOW-S" "TROVE"]
+  let arch_size segment_count * block_size * number_of_compute_nodes
+  let factor 0
+  ifelse unit = "megabytes" [set factor arch_size / 1024] [set factor arch_size / 1048576]
+  let nombre (word "times/" name_capa "/" name_function)
+  let lista_aux []
+  file-open nombre
+  while [not file-at-end?] [
+    set lista_aux lput read-from-string file-read-line lista_aux 
+  ]
+  file-close
+  let tiempo_aux -1
+  ifelse (member? name_capa capa_list = true)[
+    set tiempo_aux (random-normal (mean lista_aux) (standard-deviation lista_aux))
+  ]
+  [
+    set tiempo_aux (random-normal (mean lista_aux) (standard-deviation lista_aux)) * factor
+  ]
+  ifelse tiempo_aux < 0 [set tiempo tiempo_aux * -1] [set tiempo tiempo_aux]
+  set time_function lput tiempo time_function
+  ;set tiempo mean lista_aux
+end

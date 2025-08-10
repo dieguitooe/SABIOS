@@ -1,0 +1,187 @@
+;;;;;;;;;;;;
+;PVFS FLUSH;
+;;;;;;;;;;;;
+
+;;Maquina de Estados
+to obtener_atributos_flush
+  
+  set color orange
+    ;;Verifico si los datos estan en cache
+    ifelse( data_in_system = "In_cache")[
+        set estado task solicitar_operacion_flush
+    ]
+    [
+      ;;configuro nueva submaquina de estads encargada de obtener los atributos
+      let id who
+      ;let tipo_operacion operacion
+      let id_job capainf_j
+        let bmi_servidor id_bmi_servidor
+      hatch-pvfs_getattrs 1 [
+         set id_me_solicitud id
+         set capainf_j id_job
+         set id_bmi_servidor bmi_servidor
+         set estado task solicitar_metadatos
+         set solicitud_recv_enviada? false
+         set solicitud_send_enviada? false
+         set shape "circle"
+         set size 0.8
+         setxy [xcor] of turtle id_me_solicitud - 2 [ycor] of turtle id_me_solicitud
+         let num who
+         ask pvfs_flush id_me_solicitud[
+           set id_me_getattr num]
+      ]
+      set estado task esperar_atributos
+    ]
+   set color 74  
+   ;hatch-datas 1[
+   ;   set capa "SI"
+   ;   set funciones_tiempos []
+   ;   set funciones_tiempos lput "PVFS_sys_getattr()" funciones_tiempos
+   ;   abrir_times capa "PVFS_sys_getattr"
+   ;   escribir_output
+   ;   die
+   ; ]
+end
+
+to solicitar_operacion_flush
+  set color orange
+  let id who
+  let operacion operacion_flush
+  let bmi_servidor id_bmi_servidor
+  let dato operacion
+  ;let identificacion who
+  if(solicitud_recv_enviada? = false and solicitud_send_enviada? = false)[
+    show "enviar solicitud receive a JOB"
+    let num_ope 1
+    ask capainf_j[
+      envio_solicitud (list id num_ope "receive" bmi_servidor "no inmediato")]
+    set solicitud_recv_enviada? true
+  ]
+  if(solicitud_recv_enviada? = true and solicitud_send_enviada? = false)[
+    let resp respuesta_id_num_operacion [who] of capainf_j 1
+    if(empty? resp = false) [
+      ;;enviar solicitud a SERVIDOR
+      show "enviar solicitud send a JOB"
+      let num_ope 2
+      ask capainf_j[
+        envio_solicitud (list id num_ope "send" bmi_servidor "inesperado" dato)]
+      set solicitud_send_enviada? true      
+    ]
+  ]
+  if(solicitud_recv_enviada? = true and solicitud_send_enviada? = true)[
+    let resp respuesta_id_num_operacion [who] of capainf_j 2
+    if(empty? resp = false) [
+      if(item 2 first resp = 1)[
+        set solicitud_recv_enviada? false
+        set solicitud_send_enviada? false
+        set estado task esperar_confirmacion_flush
+      ]
+    ]
+  ]
+  set color 74
+end
+
+to esperar_atributos
+  let respuesta respuesta_id id_me_getattr
+    if(empty? respuesta = false) [
+      if(item 1 first respuesta = 1)[ 
+        set cod_error_operacion 1
+        set estado task solicitar_operacion_flush
+      ]
+      if(item 1 first respuesta = 0)[
+        set cod_error_operacion -1 
+        set estado task finalizar_operacion_flush
+      ]
+    ]
+end
+
+
+to esperar_confirmacion_flush
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 1
+  if(empty? respuesta = false) [
+    if(item 2 first respuesta = 1)[ 
+      ifelse(item 3 first respuesta = true)[
+        show "configurar transferencia"
+        set estado task configurar_transferencia_flush
+      ]
+      [
+         set cod_error_operacion -1
+         show "finalizar operacion"
+        set estado task finalizar_operacion_flush
+      ]
+    ]
+  ]
+end
+
+to configurar_transferencia_flush
+  let bmi_servidor id_bmi_servidor
+     let id who
+     let operacion_ operacion_flush
+    if(operacion_flush = "flush_keyval") or (operacion_flush = "flush_bstream")[
+      ifelse(solicitud_recv_enviada? = false)[
+        show "enviar solicitud recv a capa JOB"
+        ask capainf_j[
+          envio_solicitud (list id 3 "receive" bmi_servidor "no inmediato")]
+        set  solicitud_recv_enviada? true 
+      ]
+      
+      [
+        let respuesta respuesta_id_num_operacion [who] of capainf_j 3
+        if(empty? respuesta = false)[
+          show "enviar solicitud job_flow a capa JOB"
+          ask capainf_j[
+            envio_solicitud (list id 4 operacion_ bmi_servidor)]
+          set estado task esperar_configuracion_transferencia_flush
+        ]
+      ]
+    ]
+    ;if(operacion_rw = "read")
+    ;[
+     ; set color orange
+     ; show "enviar solicitud job_flow a capa JOB"
+      ;ask capainf_j[
+       ; envio_solicitud (list id 4 operacion_ bmi_servidor)]
+      ;set estado task esperar_configuracion_transferencia_flush
+    ;]
+      set color 74
+end
+
+to esperar_configuracion_transferencia_flush
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 4
+  if(empty? respuesta = false) [ 
+    set color orange
+     if(item 2 first respuesta = 1)[
+       ;;respuesta job completo
+        set estado task verificar_operacion_flush
+     ]
+  ]
+end
+
+to verificar_operacion_flush
+  if(operacion_flush = "flush_keyval") or (operacion_flush = "flush_bstream")[
+    let respuesta respuesta_id_num_operacion [who] of capainf_j 3
+    if(empty? respuesta = false) [ 
+      set color orange
+      if(item 2 first respuesta = 1)[
+        show  word "operacion FLUSH realizada " operacion_flush
+        set estado task finalizar_operacion_flush
+      ]
+    ]
+  ]
+  ;if(operacion_rw = "read")[
+    ;set estado task finalizar_operacion_flush
+  ;]
+  set color 74
+end
+
+
+to finalizar_operacion_flush
+    set color orange
+  let id id_system
+  show "finalizar operacion FLUSH"
+  let cod_error  cod_error_operacion
+  ask ad_pvfs id_capasup[
+    envio_respuesta (list id cod_error)]
+   ask turtle id_system[ set color green + 1]
+  die
+end

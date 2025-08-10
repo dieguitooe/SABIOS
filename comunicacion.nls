@@ -1,0 +1,58 @@
+;;Maneja el envio de solicitudes y respuesta entre los agentes
+;;Maneja el envio y recepcion de mensajes entre los AGENTES BMI
+
+to envio_solicitud [lista]
+  set solicitudes lput lista solicitudes
+end
+
+to envio_respuesta [lista]
+  set respuestas lput lista respuestas
+end
+
+;;buscar respuesta de determinado id
+to-report respuesta_id [id]
+  let resp filter [first ? = id] respuestas
+  if(empty? resp = false)[
+    set respuestas remove first resp respuestas
+  ]
+  report resp
+end
+
+;;buscar respuesta por determinado id y num operacion
+to-report respuesta_id_num_operacion [id num]
+  let resp1 filter [first ? = id] respuestas
+  let resp filter [item 1 ? = num] resp1
+  if(empty? resp = false)[
+    set respuestas remove first resp respuestas
+  ]
+  report resp
+end
+
+
+;;MENSAJES ENTRE AGENTES BMI
+;;Envio de mensajes al BMI DESTINO (BMI origen, BMI destino, identificacion,MENSAJE, ETIQUETA (TIPO DE MENSAJE (ESPERADO, INESPERADO))
+to-report envio_mensaje [id_origen id_destino identificacion mjs etiqueta]
+  let l (list id_origen id_destino identificacion mjs etiqueta)
+  ask turtle id_destino[
+    set mensajes lput l mensajes
+  ]
+  report true
+end
+;;Recepcion de mensaje del BMI correspondiente 
+to-report recepcion_mensaje [id_origen identificador]
+  let mensaje []
+  ifelse(id_origen = 0)[
+    set mensaje filter [item 4 ? = "inesperado"] mensajes
+  ]
+  [
+    set mensaje filter [first ? = id_origen] mensajes
+    set mensaje filter [item 2 ? = identificador] mensajes
+  ]
+  ifelse(not empty? mensaje = true)[
+    set mensaje first mensaje
+    let posicion position mensaje mensajes
+    set mensajes remove-item posicion mensajes
+    report mensaje
+  ]
+  [report -1]
+end

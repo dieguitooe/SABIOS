@@ -1,0 +1,227 @@
+;devuelve un valor aleatorio entre -x y x
+to-report valores_aleatorios [x]
+  report random-float (x + x) - x
+end
+
+;devuelve un valor aleatorio entre 0 y x
+to-report valores_aleatorios2 [x]
+  report random-float (x - 0) + 0
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;SYSTEM INTERFACE;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to-report sys_create [x]
+  let relacion 0.0217238338 * x
+  let aleatorio valores_aleatorios 0.016665512199546
+  report aleatorio + relacion
+end
+
+;No seria justo laburar con desvio estandar. Ajusto con 0.9358756
+to-report sys_write_exp[x]
+  let relacion  0.8 * (exp (0.710469484398639 * x))
+  let aleatorio valores_aleatorios (sys_write_desv x)
+  report aleatorio + relacion
+end
+
+to-report sys_write_lineal[x]
+  let relacion (1.65823996204 * x) + 0.4
+  let aleatorio valores_aleatorios (sys_write_desv x)
+  report aleatorio + relacion
+end
+
+;No seria justo laburar con desvio estandar. Ajusto con 0.9358756
+to-report sys_read_exp [x]
+  let relacion 1.5 * (exp (0.5330589277942909 * x))
+  let aleatorio valores_aleatorios (sys_read_desv x)
+  report aleatorio + relacion
+end
+
+to-report sys_read_lineal [x]
+  let relacion (2.54903207728 * x) + 1.2
+  let aleatorio valores_aleatorios (sys_read_desv x)
+  report aleatorio + relacion
+end
+
+to-report io_datafile_post_msgpairs [x]
+  let relacion 0.00115168976 * x 
+  let aleatorio valores_aleatorios (io_datafile_post_msgpairs_desv x)
+  report aleatorio + relacion
+end
+
+to-report io_datafile_post_msgpairs_exp [x]
+  let relacion 0.0015 * (exp (0.147927898701172 * x))
+  let aleatorio valores_aleatorios (io_datafile_post_msgpairs_desv x)
+  report aleatorio + relacion
+end
+
+to-report io_datafile_complete_operations [x]
+  let relacion 0.00279929036 * x 
+  let aleatorio valores_aleatorios (io_datafile_complete_operations_desv x)
+  report aleatorio + relacion
+end
+
+to-report io_datafile_complete_operations_exp [x]
+  let relacion 0.004 * (exp (0.092268431796363 * x))
+  let aleatorio valores_aleatorios (io_datafile_complete_operations_desv x)
+  report aleatorio + relacion
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;SYSTEMINTERFACE DESVIOS;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to-report sys_read_desv [x]
+  report  0.038109299965114 * x
+end
+
+to-report io_datafile_post_msgpairs_desv [x]
+  report  (4.76636272589994 * (10 ^ (- 5))) * x 
+end
+
+to-report io_datafile_complete_operations_desv [x]
+  report  0.000180507519278 * x 
+end
+
+to-report sys_write_desv [x]
+  report  0.173346682 * x
+end
+;;;;;;;;;;;;;;;;;;;;CLIENTE;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;correspondientes a close
+;to-report close [x]
+;  let relacion (((- 7.96759874396161) * 10 ^ (- 5)) * (x ^ 3)) - (0.001720991932609 * (x ^ 2)) + (0.00854281166715 * x)
+;  let aleatorio valores_aleatorios 0.009780701749896 
+;  report aleatorio + relacion
+;end
+;
+;;correspondientes a open
+;to-report open [x]
+;  let relacion (0.002025746052174 * (x ^ 3)) - (0.020724044923913 * (x ^ 2)) + (0.062541869200725 * x)
+;  let aleatorio valores_aleatorios 0.022356229382944
+;  report aleatorio + relacion
+;end
+;
+;;open de MPI
+;to-report mpi_file_open [x]
+;  let relacion ((- 0.018109540303226) - (x ^ 2)) + (0.138102150437419 * x)
+;  let aleatorio valores_aleatorios 0.061100680269176
+;  report aleatorio + relacion
+;end
+;
+;;correspondientes a read. No seria justo laburar con desvio estandar. Ajusto con 0.9358756
+;to-report read [x]
+;  let relacion (3.40951189938 * x) - 1.561160368725
+;  let aleatorio valores_aleatorios 0.9358756
+;  report aleatorio + relacion
+;end
+;
+;;correspondientes a write. No seria justo laburar con desvio estandar. Ajusto con 0.9358756
+;to-report write_ [x]
+;  let relacion (4.327058871755 * x) - 3.695544904425
+;  let aleatorio valores_aleatorios 0.9358756
+;  report aleatorio + relacion
+;end
+;
+;;correspondientes capa flow
+;to-report fp_multiqueue_post [x]
+;  let relacion (0.011084397833334 * (x ^ 3)) - (0.081426648300001 * (x ^ 2)) + (0.181573336066668 * x) - 0.102488808000001
+;  let aleatorio valores_aleatorios 0.010917567974112
+;  report aleatorio + relacion
+;end
+;
+;to-report mem_to_bmi_callback_fn [x]
+;  let relacion (0.6917453971 * x) - 0.7137257091
+;  let aleatorio valores_aleatorios 0.921858245900921
+;  report aleatorio + relacion
+;end
+;
+;to-report bmi_to_mem_callback_fn [x]
+;  let relacion (0.04861100532 * x) - 0.0050056031
+;  let aleatorio valores_aleatorios 0.062794370249437
+;  report aleatorio + relacion
+;end
+;
+;;correspondientes a JOB Y PVFS2
+;to-report job_pvfs [x]
+;  let relacion (0.002248183375 * (x ^ 3)) - (0.0160256885 * (x ^ 2)) + (0.034886045725 * x) - 0.016003100175
+;  let aleatorio valores_aleatorios 0.00655718132732
+;  report aleatorio + relacion
+;end
+;
+;to-report ior_GetFileSize_mpiio [x]
+;  let relacion ((- 0.014231619770968) * (x ^ 2)) + (0.117321339563226 * x) 
+;  let aleatorio valores_aleatorios 0.067792625064281
+;  report aleatorio + relacion
+;end
+;
+;to-report adioi_pvfs2_init [x]
+;  let relacion (0.003243005483575 * (x ^ 3)) - (0.019446056830435 * (x ^ 2)) + (0.035130969135266 * x)
+;  let aleatorio valores_aleatorios 0.009154680245697
+;  report aleatorio + relacion
+;end
+;
+;to-report pvfs2_msgpairarray [x]
+;  let relacion ((1.60548500000001 * (10 ^ (- 5))) * (x ^ 3)) - (0.00011894635 * (x ^ 2)) + (0.0002671068 * x) - 0.0001213313
+;  let aleatorio valores_aleatorios (4.16488329805204 * (10 ^ (- 5)))
+;  report aleatorio + relacion
+;end
+;
+;;correspondiente a bmi
+;to-report bmi_tcp_post_sendunexpected_list [x]
+;  let relacion (0.001028489333333 * (x ^ 3)) - (0.0076711127 * (x ^ 2)) + (0.017463676366667 * x) - 0.0083238278
+;  let aleatorio valores_aleatorios 0.001027087214463
+;  report aleatorio + relacion
+;end
+;
+;to-report bmi_tcp_post_send_list [x]
+;  let relacion (0.64812725364 * x) - 0.696476049299999
+;  let aleatorio valores_aleatorios 0.861986158345739
+;  report aleatorio + relacion
+;end
+;
+;to-report tcp_post_send_generic [x]
+;  let relacion ((- 0.102696066633816) * (x ^ 3)) + (0.56967550996087 * (x ^ 2)) - (0.527583667503865 * x) 
+;  let aleatorio valores_aleatorios 0.364729076480006
+;  report aleatorio + relacion
+;end
+;
+;to-report bmi_tcp_post_recv [x]
+;  let relacion ((- 0.014836091575362) * (x ^ 3)) + (0.083119062295652 * (x ^ 2)) - (0.053196887502899 * x) 
+;  let aleatorio valores_aleatorios 0.07898726616033
+;  report aleatorio + relacion
+;end
+;
+;to-report bmi_tcp_post_recv_list [x]
+;  let relacion (0.02401529376 * x) - 0.0022301855
+;  let aleatorio valores_aleatorios 0.031021884565557
+;  report aleatorio + relacion
+;end
+;
+;to-report tcp_post_recv_generic [x]
+;  let relacion (0.01710208042 * x) - 0.008301275
+;  let aleatorio valores_aleatorios 0.022212943173334
+;  report aleatorio + relacion
+;end
+;
+;to-report tcp_do_work_send [x]
+;  let relacion ((- 0.049149686881159) * (x ^ 3)) + (0.254724483326087 * (x ^ 2)) - (0.182539560749276 * x) 
+;  let aleatorio valores_aleatorios 0.188857088052873
+;  report aleatorio + relacion
+;end
+;
+;to-report work_on_send_op [x]
+;  let relacion (0.00330962295 * (x ^ 2)) - (0.00572614185 * x) + 0.07027027875
+;  let aleatorio valores_aleatorios 0.014964428170589
+;  report aleatorio + relacion
+;end
+;
+;to-report tcp_do_work_recv [x]
+;  let relacion (0.68892355788 * x) - 0.0255749351
+;  let aleatorio valores_aleatorios 0.892034377811965
+;  report aleatorio + relacion
+;end
+;
+;to-report work_on_recv_op [x]
+;  let relacion (0.22980970582 * x) + 0.0197753772
+;  let aleatorio valores_aleatorios 0.297304403009372
+;  report aleatorio + relacion
+;end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;SERVIDOR;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+ 

@@ -1,0 +1,368 @@
+__includes["data.nls"]
+
+globals[desc_bmic]
+;;;;;;;;;
+;;;BMI;;;
+;;;;;;;;;
+
+;;codigo de publicacion 1 exitosa, 0 encolada, -1 error  
+;;buffer bmi [id_origen num_operacion operacion id_bmidestino funcion callback id_opejob tipo_transmision cod_pub]
+
+to esperar_bmi
+  set desc_bmic descripcion
+  ;;Verifico si existen solicitudes entrantes
+  if(length solicitudes > 0)[
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_bmi
+  ]
+end
+
+to decodificar_bmi
+  ;;Determino el tipo de operacion a tratar transicionando al estado correspondiente
+  let operacion item 2 solicitud_procesando
+  if(operacion = "send")[
+    set color lime
+    set estado task tratar_bmi_send]
+  if(operacion = "receive")[
+    set color lime
+    set estado task tratar_bmi_recv]
+  if(operacion = "test")[
+    set estado task verificar_operaciones_bmi]
+end
+
+to tratar_bmi_send
+  ;id_capaorigen num_operacion operacion id_bmidst identificacion funcion_callback id_opejob tipo_transmision info_operacion
+  let id who
+  let cod_publicacion 0
+  let operacion item 2 solicitud_procesando
+  let num_ope get_id_bmi
+  let id_job item 1 solicitud_procesando
+  let id_bmi item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  let funcion_callback item 5 solicitud_procesando
+  let tipo_transmision item 6 solicitud_procesando
+  ;;Si la solicitud requiere procesamiento inmediato, se habilita en true la variable comunicar_operacion_send_bmi? para comunicar de operacion send realizada en el proximo estado
+  ;;Si la capa solicitante es FLOW agrego la operacion en el buffer, para luego comunicar a la capa JOB la cual invoca la Funcion Callback correspondiente
+  ;;ifelse(tipo_transmision = "inmediato" or tipo_transmision = "inesperado")[
+  set comunicar_operacion_send_bmi? true
+;  hatch-datas 1[
+;      set capa desc_bmic
+;      set funciones_tiempos []
+;      set funciones_tiempos lput "bmi_tcp_post_send()" funciones_tiempos
+;      abrir_times capa "bmi_tcp_post_send"
+;      escribir_output
+;      die
+;   ]
+  let id_aux [nodo_id] of capasup_j
+  hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "bmi_tcp_post_send_list()" funciones_tiempos
+      abrir_times capa "bmi_tcp_post_send_list"
+      escribir_output
+      die
+   ]
+  hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "tcp_post_send_generic()" funciones_tiempos
+      abrir_times capa "tcp_post_send_generic"
+      escribir_output
+      die
+   ]
+  set estado task comunicacion_bmi_send
+end
+
+to comunicacion_bmi_send
+  ;;Se procede a enviar el mensaje a BMI servidor
+  ;;En el caso de que el requerimiento fuese inmediato se debe comunicar a 
+  ;;la capa solicitante que se ha llevado a cabo la operacion
+  ifelse(comunicar_operacion_send_bmi? = true)[
+    let id_job item 1 solicitud_procesando
+    let operacion item 2 solicitud_procesando
+    let bmi_servidor item 3 solicitud_procesando
+    let identificacion item 4 solicitud_procesando
+    let funcion_callback item 5 solicitud_procesando
+    let tipo_transmision item 6 solicitud_procesando
+    let dato ""
+    if(tipo_transmision = "inesperado")[
+      set dato item 7 solicitud_procesando 
+    ]
+    let envio? envio_mensaje who bmi_servidor identificacion dato tipo_transmision
+    let id_solicitante item 0 solicitud_procesando
+    let num_ope item 1 solicitud_procesando
+    let cod_error 1
+    if(is-flow? turtle id_solicitante = true )[
+      set num_ope item 7 solicitud_procesando
+      agregar_operacion_b_buffer id_solicitante num_ope operacion bmi_servidor funcion_callback identificacion id_job tipo_transmision cod_error
+    ]
+    
+    let id who
+    show (word "enviar respuesta envio a capa " [breed] of turtle id_solicitante)
+;    hatch-datas 1[
+;      set capa desc_bmic
+;      set funciones_tiempos []
+;      set funciones_tiempos lput "tcp_do_work()" funciones_tiempos
+;      abrir_times capa "tpc_do_work"
+;      escribir_output
+;      die
+;   ]
+    let id_aux [nodo_id] of capasup_j
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "tcp_do_work_send()" funciones_tiempos
+      abrir_times capa "tcp_do_work_send"
+      escribir_output
+      die
+   ]
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "work_on_send_op()" funciones_tiempos
+      abrir_times capa "work_on_send_op"
+      escribir_output
+      die
+   ]
+    ask turtle id_solicitante[
+      envio_respuesta (list id num_ope cod_error)]
+    
+    set comunicar_operacion_send_bmi? false
+  ]
+  
+  ;;En caso de que fuese una operacion encolada se modificara su estado en completado 1
+  [
+    let info_ope_bmi first filter[item 1 ? = num_operacion_procesando] buffer
+    let bmi_servidor item 3 info_ope_bmi
+    let identificacion item 5 info_ope_bmi
+    let envio? envio_mensaje who bmi_servidor identificacion "b" 1
+    let posicion position info_ope_bmi buffer
+    set info_ope_bmi replace-item 8 info_ope_bmi  1
+    set buffer replace-item posicion buffer info_ope_bmi      
+  ]
+  ;;transicion al estado ESPERAR
+  set estado task esperar_bmi
+  set color green + 1
+end
+
+to tratar_bmi_recv
+  ;id_capaorigen num_operacion operacion  id_bmidst identificacion funcion_callback id_opejob tipo_transmision info_operacion
+  let id who
+  ;let operacion item 2 solicitud_procesando
+  let num_ope_bmi get_id_bmi
+  let id_job item 1 solicitud_procesando
+  let operacion item 2 solicitud_procesando
+  let id_bmi item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  let funcion_callback item 5 solicitud_procesando
+  let tipo_transmision item 6 solicitud_procesando
+  let cod_publicacion 0
+  ;;sila solicitud requiere procesamiento inmediato 
+  ifelse(tipo_transmision = "inmediato")[
+    set estado task comunicacion_bmi_recv
+    set comunicar_operacion_recv_bmi? true
+  ]
+  [
+    ;;Si la solicitud requiere un procesamiento no inmediato se encola para luego procesar 
+    ;;Se comunica al agente JOB o FLOW de que la operacion ha se procesara luego y la misma se almacena en el buffer   
+    let id_solicitante item 0 solicitud_procesando
+    let num_ope item 1 solicitud_procesando
+    if(is-flow? turtle id_solicitante = true )[
+      set num_ope item 7 solicitud_procesando
+    ]
+    
+    agregar_operacion_b_buffer id_solicitante num_ope_bmi operacion id_bmi funcion_callback identificacion id_job tipo_transmision cod_publicacion
+    show (word "enviar respuesta envio a capa" [breed] of turtle id_solicitante)
+    let id_aux [nodo_id] of capasup_j
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "bmi_tcp_post_recv()" funciones_tiempos
+      abrir_times capa "bmi_tcp_post_recv"
+      escribir_output
+      die
+   ]
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "bmi_tcp_post_recv_list()" funciones_tiempos
+      abrir_times capa "bmi_tcp_post_recv_list"
+      escribir_output
+      die
+   ]
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "tcp_post_recv_generic()" funciones_tiempos
+      abrir_times capa "tcp_post_recv_generic"
+      escribir_output
+      die
+   ]
+    ask turtle id_solicitante[
+      envio_respuesta (list id num_ope cod_publicacion)]
+    
+    
+    ;;transicion al estado ESPERAR
+    set estado task esperar_bmi
+    set color green + 1
+  ]
+end
+
+to comunicacion_bmi_recv
+  ;;Se verifica si se ha llegado el mensaje del BMI SERVIDOR
+  ;;En caso de que fuese una operacion encolada se modificara su estado en completado 1
+  ;;En el caso de que el requerimiento fuese inmediato se debe comunicar a 
+  ;;la capa solicitante que se ha llevado a cabo la operacion
+  ifelse(comunicar_operacion_recv_bmi? = true)[
+    let id_solicitante item 0 solicitud_procesando
+    let id_job item 1 solicitud_procesando
+    let id_bmi item 3 solicitud_procesando
+    let identificacion item 4 solicitud_procesando
+    let funcion_callback item 5 solicitud_procesando
+    let tipo_transmision item 6 solicitud_procesando
+    let operacion item 2 solicitud_procesando
+    let cod_error 0
+    let mensaje -1
+    let recv recepcion_mensaje id_bmi identificacion
+    if(recv != -1)[ set cod_error 1
+      set mensaje item 3 recv]
+    let id who
+     let num_ope_bmi get_id_bmi
+     let num_ope item 1 solicitud_procesando
+    if(is-flow? turtle id_solicitante = true )[
+      
+      set num_ope item 7 solicitud_procesando
+      agregar_operacion_b_buffer id_solicitante num_ope_bmi operacion id_bmi funcion_callback identificacion id_job tipo_transmision cod_error
+    ]
+    if(is-job? turtle item 0 solicitud_procesando = true )[
+      if(cod_error = 0)[
+        agregar_operacion_b_buffer id_solicitante num_ope_bmi operacion id_bmi funcion_callback identificacion id_job tipo_transmision cod_error
+      ]
+    ]
+    show (word "enviar respuesta envio a capa " [breed] of turtle id_solicitante)
+     let id_aux [nodo_id] of capasup_j
+     hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "work_on_send_op()" funciones_tiempos
+      abrir_times capa "work_on_send_op"
+      escribir_output
+      die
+   ]
+;     hatch-datas 1[
+;      set capa desc_bmic
+;      set funciones_tiempos []
+;      set funciones_tiempos lput "tcp_do_work()" funciones_tiempos
+;      abrir_times capa "tcp_do_work"
+;      escribir_output
+;      die
+;   ]
+     hatch-datas 1[
+      set id_app id_aux
+      set capa desc_bmic
+      set funciones_tiempos []
+      set funciones_tiempos lput "tcp_do_work_send()" funciones_tiempos
+      abrir_times capa "tcp_do_work_send"
+      escribir_output
+      die
+   ]
+    ask turtle id_solicitante[
+      envio_respuesta (list id num_ope cod_error mensaje)]
+    
+    set comunicar_operacion_recv_bmi? false 
+  ]
+  
+  [
+    ;;En caso de que fuese una operacion encolada se modificara su estado en completado 1
+    let info_ope_bmi first filter[item 1 ? = num_operacion_procesando] buffer
+    let bmi_origen item 3 info_ope_bmi
+    let identi item 5 info_ope_bmi
+    let recv recepcion_mensaje bmi_origen identi
+    let posicion position info_ope_bmi buffer
+    ifelse(recv != -1)[
+      set info_ope_bmi replace-item 8 info_ope_bmi  1
+      set info_ope_bmi lput item 3 recv info_ope_bmi
+      set buffer replace-item posicion buffer info_ope_bmi
+    ]
+    [
+      ;  if(item 7 info_ope_bmi = "no inmediato")[
+      set buffer remove-item posicion buffer
+      set buffer lput info_ope_bmi buffer
+      ;]
+    ]
+  ]
+  ;;Transicion al estado ESPERAR
+  set estado task esperar_bmi
+  set color green + 1
+end
+
+to verificar_operaciones_bmi
+  ;;Verifico en la variable buffer si existen operaciones bmi completas (item 6 = 1)
+  ;;En caso que existan procedo a comunicarle a la capa JOB del estado de las mismas
+  let id who
+  let num_ope item 1 solicitud_procesando
+  let lista_operaciones_completas filter [item 8 ? = 1] buffer
+  ifelse(length lista_operaciones_completas > 0)[
+    ;; show "comunico a JOB de operaciones BMI completas"
+    ask capasup_j[
+      envio_respuesta (list id num_ope lista_operaciones_completas)
+    ]
+    foreach lista_operaciones_completas[
+      set buffer remove ? buffer
+    ]
+  ]
+  [
+    ;;En caso de que no existan operaciones completas comunico a la capa JOB [false] 
+    ask capasup_j[
+      envio_respuesta (list id num_ope false)]
+  ]
+  ;; A continuacion, verifico operaciones BMI incompletas seleccionando una para luego procesar
+  ;; get_mensajes_inesperados
+  let lista_operaciones_incompletas filter [item 8 ? = 0] buffer
+  ifelse(length lista_operaciones_incompletas > 0)[
+    set color lime
+    let operacion_incompleta first lista_operaciones_incompletas
+    let operacion_ item 2 operacion_incompleta
+    set num_operacion_procesando item 1 operacion_incompleta 
+    
+    if(operacion_ = "send")[
+      set estado task comunicacion_bmi_send
+    ]
+    if(operacion_ = "receive")[
+      set estado task comunicacion_bmi_recv
+    ]
+    ;; ]
+  ]
+  [
+  ;   hatch-datas 1[
+  ;    set capa desc_bmic
+  ;    set funciones_tiempos []
+  ;    set funciones_tiempos lput "bmi_tcp_testcontext()" funciones_tiempos
+  ;    die
+  ; ]
+    ;;En caso que no existan operaciones incompletas, transiciono al estado ESPERAR
+    set estado task esperar_bmi
+  ]
+end
+
+;;;añadir a buffer
+to agregar_operacion_b_buffer [id_capaorigen num_operacion operacion_  id_bmidst funcion_callback  identificacion id_opejob tipo_transmision info_operacion]
+  let nueva_operacion_bmi (list id_capaorigen num_operacion operacion_ id_bmidst  funcion_callback identificacion id_opejob tipo_transmision info_operacion)
+  set buffer lput nueva_operacion_bmi buffer
+end
+
+;;nuevo id para operacion JOB
+to-report get_id_bmi
+  set num_operacion_bmi num_operacion_bmi + 1
+  report num_operacion_bmi
+end

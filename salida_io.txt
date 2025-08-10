@@ -1,0 +1,15 @@
+
+Resumen:
+Datos en sistema: In_cache
+Cantidad codigo a ejecutar: 1
+Tipo operacion: read
+Nodos Computo: 4
+Nodos Storage: 4
+Tiempo total: 61.415560387514404
+Cantidad de procesos por nodo: 1
+Access: file-per-process
+FileSystem: pvfs2
+BlockSize: 256 megabytes
+SegmentCount: 1 megabytes
+Tamaño archivo: 1024 megabytes
+Max read - (bw): 16.673298974052447 megabytes/sec

@@ -1,0 +1,182 @@
+;;;;;;;;;;;
+;MAIN LOOP;
+;;;;;;;;;;;
+
+__includes["ml_creation.nls" "ml_read.nls" "ml_rw.nls" "ml_flush.nls" "data.nls"]
+
+
+to esperar_mdt_main_loop
+ ;set desc_ml "ML"
+  
+  ;;Verifico si existen solicitudes entrantes 
+ ifelse(length solicitudes > 0)[
+    set color violet
+    set solicitud_procesando first solicitudes
+    ;show solicitud_procesando
+    set solicitudes remove solicitud_procesando solicitudes
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_mdt_main_loop
+  ]
+ [
+    ;;Monitoreo respuesta de Jobs (mensajes inesperados)
+    let id_capainf [who] of capainf
+    let lista_jobs respuesta_id id_capainf
+    if(empty? lista_jobs = false)[
+      foreach lista_jobs [
+        if(item 1 ? = 1)[
+          set solicitudes lput item 2 ? solicitudes
+          let id who
+          foreach [1 2 3][
+            ask capainf[
+              ;;0 inesperado 1 esperado
+              envio_solicitud (list id who "receive" 0 0 "inesperado") 
+            ]
+          ]
+        ]
+      ]
+    ]
+ ]
+end
+
+;;ESTADO DECODIFICAR 
+to decodificar_mdt_main_loop
+  ;Determino el tipo de operacion a tratar y transiciono al estado correspondiente
+  ;;show "decodificar operacion"
+  let operacion item 3 solicitud_procesando
+  if(operacion = "open-read")[
+    ;;Transicion a ESTADO TRATAR OPEN
+    set estado task tratar_mdt_main_loop_open]
+  if(operacion = "open-creation")[
+    ;;Transicion a ESTADO TRATAR OPEN
+    show "test open-creation"
+    set estado task tratar_mdt_main_loop_open]
+;  if(operacion = "write")[
+;    set estado task tratar_main_loop_rw]
+;  if(operacion = "read")[
+;    set estado task tratar_main_loop_rw]
+  if(operacion = "iniciar")[
+    show "sistemas incializado"
+    ;let id_aux -1
+    ;ifelse ([hidden?] of capainf = false)[set id_aux [who] of [turtles-at 1 1 ] of patch -32 9][set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 12]
+    ;set nodo_id item 0 id_aux
+    let id_aux [who] of self
+    set nodo_id id_aux
+    hatch-datas 1[
+      set id_app id_aux
+      set capa "ML"
+      set funciones_tiempos []
+      set funciones_tiempos lput "main()" funciones_tiempos
+      abrir_times capa "main"
+      escribir_output
+      die
+   ]
+     hatch-datas 1[
+      set id_app id_aux
+      set capa "ML"
+      set funciones_tiempos []
+      set funciones_tiempos lput "server_initialize()" funciones_tiempos
+      abrir_times capa "server_initialize"
+      escribir_output
+      die
+   ]
+    
+    set estado task inicializar_mdt_main_loop
+     
+   ] 
+  
+;  if(operacion = "flush_keyval")[
+;;    hatch-datas 1[
+;;      set capa desc_ml
+;;      set funciones_tiempos []
+;;      set funciones_tiempos lput "flush_keyval_flush" funciones_tiempos
+;;      escribir_output
+;;      die
+;;   ]
+;    set estado task tratar_main_loop_flush
+;   ]
+;  if(operacion = "flush_bstream") [
+;;    hatch-datas 1[
+;;      set capa desc_ml
+;;      set funciones_tiempos []
+;;      set funciones_tiempos lput "flush_bstream_flush" funciones_tiempos
+;;      escribir_output
+;;      die
+;;   ]
+;    set estado task tratar_main_loop_flush
+;   ]
+end
+
+
+to inicializar_mdt_main_loop
+  ifelse (inicializado? = false)[
+  let id who
+  ;;let num_ope num_operacion_job_servidor
+  ;show "test mainloop"
+  foreach [1 2 3][
+    ask capainf[
+      ;;0 inesperado 1 esperado
+      envio_solicitud (list id who "receive" 0 0 "inesperado") 
+    ]
+  ]
+  ;;agregar_operacion_main_loop_buffer num_ope "receive" 0
+  set inicializado? true
+  set estado task esperar_mdt_main_loop][set estado task esperar_mdt_main_loop]
+end
+
+;;ESTADO TRATAR OPEN
+to tratar_mdt_main_loop_open
+  ;;Configura una nueva maquina de estados para gestionar la apertura
+  ;;Para ello, crea un nuevo agente dependiendo el subtipo ML_CREATION ò ML_READ
+  let id_bmi_solicitante item 0 solicitud_procesando
+  let id_mjs_bmi item 2 solicitud_procesando
+  let operacion item 3 solicitud_procesando
+  let id_job capainf
+  let id who
+;  let id_aux -1
+;  ifelse ([hidden?] of capainf = false)[set id_aux [who] of [turtles-at 1 1 ] of patch -32 9][set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 12]
+;  set nodo_id item 0 id_aux
+  let id_aux nodo_id
+;  show nodo_id
+  show id_aux
+  if (inicializado? = true) [hatch-datas 1[
+      ;set id_app [who] of turtle id
+      set id_app id_aux
+      set capa desc_ml
+      set funciones_tiempos []
+      set funciones_tiempos lput "write_keyvals()" funciones_tiempos
+      abrir_times capa "write_keyvals"
+      escribir_output
+      die
+  ]]
+;  if(operacion = "open-creation")[
+;    hatch-mdt_ml_creations 1[
+;      set shape "circle"
+;      set size 1
+;      setxy (4) (-2)
+;      set mainloop id
+;      set id_bmi_cliente id_bmi_solicitante
+;      set id_mjs id_mjs_bmi
+;      set capainf_j id_job
+;      set operacion operacion
+;      set estado task tratar_creacion
+;      set shape "circle"
+;      set size 1
+;      setxy [xcor] of turtle mainloop - 1 [ycor] of turtle mainloop
+;    ]
+;    
+;  ]
+  if(operacion = "open-read")[
+    hatch-mdt_ml_reads 1[
+      set mainloop id
+      set id_bmi_cliente id_bmi_solicitante
+      set id_mjs id_mjs_bmi
+      set capainf_j id_job
+      set operacion operacion
+      set estado task tratar_lectura_metadatos
+      set shape "circle"
+      set size 1
+      setxy [xcor] of turtle mainloop [ycor] of turtle mainloop
+    ]
+  ]
+  set estado task esperar_mdt_main_loop
+end 

@@ -1,0 +1,229 @@
+__includes["data.nls"]
+
+globals[desc_mpiio]
+;;;;;;;;;;
+;;MPI IO;;
+;;;;;;;;;;
+
+;;ESTADO ESPERAR
+to esperar_mpiio
+  ;;Verifico si existe solicitud entrante
+  set desc_mpiio descripcion
+  if(length solicitudes > 0)[
+    set color blue
+    show "solicitud"
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_mpiio 
+  ]
+end
+
+
+;;ESTADO DECODIFICAR 
+to decodificar_mpiio
+  ;;Determina el tipo de operacion a tratar y transiciona al estado correspondiente
+  show "decodificar operacion"
+  let operacion item 2 solicitud_procesando
+  if(operacion = "open")[
+    set estado task tratar_mpiio_open]
+  if(operacion = "write")[
+    set estado task tratar_mpiio_write]
+  if(operacion = "read")[
+    set estado task tratar_mpiio_read]
+  if(operacion = "close")[
+    set estado task tratar_mpiio_close]
+  if(operacion = "flush_bstream" ) or (operacion = "flush_keyval")[
+    set estado task tratar_mpiio_flush]
+end
+
+
+;;ESTADO TRATAR OPEN
+to tratar_mpiio_open
+  ;;Se procede a enviar una solicitud OPEN a la capa ADIO
+  show "enviar solicitud OPEN a capa ADIO"
+  let id_aux [who] of capasup
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_mpiio
+    set funciones_tiempos []
+    set funciones_tiempos lput "MPI_File_Open()" funciones_tiempos
+    abrir_times capa "MPI_File_open"
+    escribir_output
+    die
+  ]
+  let id who
+  let sistema item 3 solicitud_procesando
+  ask capainf[
+    envio_solicitud (list id who "open" sistema)]
+  ;;Transicion a ESTADO PROCESANDO OPERACION OPEN
+  set estado task procesando_operacion_mpiio_open
+end 
+
+;;ESTADO PROCESANDO OPERACION MPIIO OPEN
+to procesando_operacion_mpiio_open
+  ;;Espero la respuesta del procesamiento de la solicitud OPEN
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta OPEN a APP"
+    let id who
+    let cod_error item 1 first respuesta
+    ask app item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_mpiio
+  ]
+end
+
+;;ESTADO TRATAR READ
+to tratar_mpiio_read
+  ;;Se procede a enviar una solicitud READ a la capa ADIO
+  show "enviar solicitud  READ a capa ADIO"
+;  hatch-datas 1[
+;    set capa desc_mpiio
+;    set funciones_tiempos []
+;    set funciones_tiempos lput "MPI_File_Read_At_All()" funciones_tiempos
+;    abrir_times capa "MPI_File_read_at"
+;    escribir_output
+;    die
+;  ]
+;  hatch-datas 1[
+;    set capa desc_mpiio
+;    set funciones_tiempos []
+;    set funciones_tiempos lput "MPI_File_Read_All()" funciones_tiempos
+;    abrir_times capa "MPI_File_read"
+;    escribir_output
+;    die
+;  ]
+  let id who
+  let sistema item 3 solicitud_procesando
+  ask capainf[
+    envio_solicitud (list id who "read" sistema)]
+  ;;Transicion a ESTADO PROCESANDO OPERACION MPIIO READ
+  set estado task procesando_operacion_mpiio_read
+end 
+
+;;ESTADO PROCESANDO OPERACION MPIIO READ
+to procesando_operacion_mpiio_read
+  ;;Espero la respuesta del procesamiento de la solicitud READ
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    SHOW "enviar respuesta READ a APP"
+    let id who
+    let cod_error item 1 first respuesta
+    ask app item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_mpiio
+  ]
+end
+
+;;ESTADO TRATAR WRITE 
+to tratar_mpiio_write
+  ;;Se procede a enviar una solicitud WRITE a la capa ADIO
+  show "enviar solicitud a capa ADIO"
+;  hatch-datas 1[
+;    set capa desc_mpiio
+;    set funciones_tiempos []
+;    set funciones_tiempos lput "MPI_File_Write_At_All()" funciones_tiempos
+;    abrir_times capa "MPI_File_write_at"
+;    set funciones_tiempos lput "MPI_File_Write_All()" funciones_tiempos
+;    abrir_times capa "MPI_File_write"
+;    escribir_output
+;    die
+;  ]
+  let id who
+  let sistema item 3 solicitud_procesando
+  ask capainf[
+    envio_solicitud (list id who "write" sistema)]
+  ;;Transicion a ESTADO PROCESANDO OPERACION MPIIO WRITE
+  set estado task procesando_operacion_mpiio_write
+end 
+
+;;ESTADO PROCESANDO OPERACION MPIIO WRITE
+to procesando_operacion_mpiio_write
+  ;;Espero la respuesta del procesamiento de la solicitud WRITE
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta WRITE a APP"
+    let id who
+    let cod_error item 1 first respuesta
+    ask app item 0 solicitud_procesando[
+      envio_respuesta (list id respuesta)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_mpiio
+  ]
+end
+
+;;ESTADO TRATAR CLOSE
+to tratar_mpiio_close
+  show "enviar solicitud CLOSE a capa ADIO"
+;  let lista apps-at ([xcor] of self) 13
+;  show lista
+  ;show capasup
+  let id_aux [who] of capasup
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_mpiio
+    set funciones_tiempos []
+    set funciones_tiempos lput "MPI_File_Close()" funciones_tiempos
+    abrir_times capa "MPI_File_close"
+    escribir_output
+    die
+  ]
+  let id who
+  let sistema item 3 solicitud_procesando
+  ask capainf[
+    envio_solicitud (list id who "close" sistema)]
+  set estado task procesando_operacion_mpiio_close
+end
+
+;;ESTADO PROCESANDO OPERACION MPIIO CLOSE
+to procesando_operacion_mpiio_close
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false)[
+    set color sky
+    show "enviar respuesta CLOSE a APP"
+    let id who
+    let cod_error item 1 first respuesta
+    ask app item 0 solicitud_procesando[
+      envio_respuesta (list id respuesta)]
+    set estado task esperar_mpiio
+    ]
+end
+
+;;ESTADO TRATAR FLUSH
+to tratar_mpiio_flush
+  show "enviar solicitud FLUSH a capa ADIO"
+  ;hatch-datas 1[
+  ;  set capa desc_mpiio
+  ;  set funciones_tiempos []
+  ;  set funciones_tiempos lput "MPI_File_Sync()" funciones_tiempos
+  ;  abrir_times desc "MPI_File_sync"
+  ;  escribir_output
+  ;  die
+  ;]
+  let id who
+  let sistema item 3 solicitud_procesando
+  let op item 2 solicitud_procesando
+  ask capainf[
+    envio_solicitud (list id who op sistema)]
+  set estado task procesando_operacion_mpiio_flush
+end
+
+;;ESTADO PROCESANDO OPERACION MPIIO FLUSH
+to procesando_operacion_mpiio_flush
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false)[
+    set color sky
+    show "enviar respuesta FLUSH a APP"
+    let id who
+    let cod_error item 1 first respuesta
+    ask app item 0 solicitud_procesando[
+      envio_respuesta (list id respuesta)]
+    set estado task esperar_mpiio
+    ]
+end

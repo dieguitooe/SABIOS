@@ -1,0 +1,373 @@
+__includes["data.nls"]
+
+globals[desc_bmis]
+;;;:;;;;;;
+;;;;BMI;;;
+;SERVIDOR;
+;;;;;;;;;;
+
+;;buffer bmi [id_origen num_operacion operacion id_bmidestino funcion callback id_opejob tipo_transmision cod_pub]
+
+to esperar_bmi_s
+  ;set desc_bmis (replace-item 2 descripcion "I-S")
+  set desc_bmis "BMI-S"
+  if(length solicitudes > 0)[
+    ;;Transicion a ESTADO DECODIFICAR
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    set estado task decodificar_bmi_s
+  ]
+end
+
+to decodificar_bmi_s
+  let operacion item 2 solicitud_procesando
+  if(operacion = "send")[
+     set color violet
+    set estado task tratar_bmi_envio_s]
+  if(operacion = "receive")[
+     set color violet
+    set estado task tratar_bmi_recepcion_s]
+  if(operacion = "test")[
+    set estado task comprobar_operacion_bmi_s]
+end
+
+to tratar_bmi_envio_s
+  let id who
+  let num get_id_bmi_servidor
+  let operacion item 2 solicitud_procesando
+  let id_job item 1 solicitud_procesando
+  let bmi_cliente item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  let funcion_callback item 5 solicitud_procesando
+  let tipo_transmision item 6 solicitud_procesando
+  let cod_publicacion 1
+  set comunicar_operacion_send_bmi? true
+  set nodo_id [nodo_id] of [capasup] of capasup_j
+  let id_aux nodo_id
+  ;show nodo_id
+  hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "bmi_tcp_post_send()" funciones_tiempos
+        abrir_times capa "bmi_tcp_post_send"
+        escribir_output
+        die
+   ]
+;  hatch-datas 1[
+;        set capa desc_bmis
+;        set funciones_tiempos []
+;        set funciones_tiempos lput "bmi_tcp_post_send_list" funciones_tiempos
+;        abrir_times capa capa
+;        escribir_output
+;        die
+;   ]
+  hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "tcp_post_send_generic()" funciones_tiempos
+        abrir_times capa "tcp_post_send_generic"
+        escribir_output
+        die
+   ]
+  if(is-flow_s? turtle item 0 solicitud_procesando = true )[
+    let id_capasup_f [who] of capasup_f
+    agregar_operacion_bmi_buffer id_capasup_f num operacion bmi_cliente funcion_callback identificacion id_job tipo_transmision cod_publicacion
+  ]
+  set estado task comunicacion_envio_s
+end
+
+to comunicacion_envio_s
+  ;;comunicacion real
+  let bmi_origen who
+  ifelse(comunicar_operacion_send_bmi? = true)[
+    let id who
+    let bmi_destino item 3 solicitud_procesando
+    let identificacion item 4 solicitud_procesando
+    let num_ope item 1 solicitud_procesando
+    let id_solicitante item 0 solicitud_procesando
+    let dato ""
+    if(is-flow_s? turtle id_solicitante  = true )[
+      set num_ope item 7 solicitud_procesando
+          set dato item 8 solicitud_procesando
+    ]
+    
+    if(is-job_s? turtle id_solicitante  = true )[
+          set dato item 7 solicitud_procesando
+    ]    
+    let envio? envio_mensaje bmi_origen bmi_destino identificacion dato 1;;item 2 solicitud_procesando "x"
+    
+    show (word "enviar respuesta envio a capa " [breed] of turtle id_solicitante)
+;    hatch-datas 1[
+;        set capa desc_bmis
+;        set funciones_tiempos []
+;        set funciones_tiempos lput "tcp_do_work()" funciones_tiempos
+;        abrir_times capa capa
+;        escribir_output
+;        die
+;   ]
+    set nodo_id [nodo_id] of [capasup] of capasup_j
+    let id_aux nodo_id
+    ;show nodo_id
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "tcp_do_work_send()" funciones_tiempos
+        abrir_times capa "tcp_do_work_send"
+        escribir_output
+        die
+   ]
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "work_on_send_op()" funciones_tiempos
+        abrir_times capa "work_on_send_op"
+        escribir_output
+        die
+   ]
+    ask turtle id_solicitante[
+      envio_respuesta (list id num_ope 1)]   
+    
+    set comunicar_operacion_send_bmi? false
+    
+  ]
+  [
+    let info_ope_bmi first filter[item 1 ? = num_operacion_procesando] buffer
+    let bmi_destino item 3 info_ope_bmi
+    let identificacion item 5 info_ope_bmi
+    let envio? envio_mensaje bmi_origen bmi_destino identificacion "s" 1;;item 2 solicitud_procesando "x"
+    let posicion position info_ope_bmi buffer
+    set info_ope_bmi replace-item 8 info_ope_bmi  1
+    set buffer replace-item posicion buffer info_ope_bmi
+    
+  ]
+  set estado task esperar_bmi_s
+   set color violet + 1
+end
+
+to tratar_bmi_recepcion_s
+  let cod_publicacion 0
+  let id who
+  let operacion item 2 solicitud_procesando
+  let num get_id_bmi_servidor
+  let bmi_cliente item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  let funcion_callback item 5 solicitud_procesando
+  let id_job item 1 solicitud_procesando
+  let tipo_transmision item 6 solicitud_procesando
+  ifelse(tipo_transmision = "inmediato")[
+    set cod_publicacion 1
+    set comunicar_operacion_recv_bmi? true
+    set estado task comunicacion_recepcion_s
+    
+  ]
+  [
+    let id_solicitante item 0 solicitud_procesando
+    let num_ope item 1 solicitud_procesando
+    ifelse(is-flow_s? turtle item 0 solicitud_procesando = true )[
+      set num_ope item 7 solicitud_procesando
+      agregar_operacion_bmi_buffer id_solicitante num operacion bmi_cliente funcion_callback identificacion id_job tipo_transmision cod_publicacion
+    ]
+    [
+      if(cod_publicacion = 0 )[
+        agregar_operacion_bmi_buffer id_solicitante num operacion bmi_cliente funcion_callback identificacion id_job tipo_transmision cod_publicacion
+      ]
+    ]
+    show (word "enviar respuesta envio a capa" [breed] of turtle id_solicitante)
+    set nodo_id [nodo_id] of [capasup] of capasup_j
+    let id_aux nodo_id
+    ;show nodo_id
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "bmi_tcp_post_recv()" funciones_tiempos
+        abrir_times capa "bmi_tcp_post_recv"
+        escribir_output
+        die
+   ]
+;    hatch-datas 1[
+;        set capa desc_bmis
+;        set funciones_tiempos []
+;        set funciones_tiempos lput "bmi_tcp_post_recv_list()" funciones_tiempos
+;        abrir_times capa capa
+;        escribir_output
+;        die
+;   ]
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "tcp_post_recv_generic()" funciones_tiempos
+        abrir_times capa "tcp_post_recv_generic"
+        escribir_output
+        die
+   ]
+    ask turtle id_solicitante[
+      envio_respuesta (list id num_ope cod_publicacion)]
+    
+      set estado task esperar_bmi_s 
+     set color violet + 1
+  ]
+end
+
+to comunicacion_recepcion_s
+  ;;comunicacion real
+  ifelse(comunicar_operacion_recv_bmi? = true)[
+    let id_job item 1 solicitud_procesando
+    let id_bmi item 3 solicitud_procesando
+    let identificacion item 4 solicitud_procesando
+    let funcion_callback item 5 solicitud_procesando
+    let tipo_transmision item 6 solicitud_procesando
+    let operacion item 2 solicitud_procesando
+    let num get_id_bmi_servidor
+    let recv recepcion_mensaje id_bmi identificacion
+    let cod_ope 0
+    if (recv != -1)[set cod_ope 1]
+    
+    let id who
+    let id_solicitante item 0 solicitud_procesando
+    let num_ope item 1 solicitud_procesando
+    show (word "enviar respuesta envio a capa" [breed] of turtle id_solicitante)
+    set nodo_id [nodo_id] of [capasup] of capasup_j
+    let id_aux nodo_id
+    ;show nodo_id
+;    hatch-datas 1[
+;        set capa desc_bmis
+;        set funciones_tiempos []
+;        set funciones_tiempos lput "tcp_do_work()" funciones_tiempos
+;        abrir_times capa "tcp_do_work"
+;        escribir_output
+;        die
+;   ]
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "tcp_do_work_recv()" funciones_tiempos
+        abrir_times capa "tcp_do_work_recv"
+        escribir_output
+        die
+   ]
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_bmis
+        set funciones_tiempos []
+        set funciones_tiempos lput "work_on_recv_op()" funciones_tiempos
+        abrir_times capa "work_on_recv_op"
+        escribir_output
+        die
+   ]
+  
+    if(is-flow_s? turtle id_solicitante = true )[
+      
+      set num_ope item 7 solicitud_procesando
+      
+      ask turtle id_solicitante[
+        envio_respuesta (list id num_ope cod_ope)]
+      
+      agregar_operacion_bmi_buffer id_solicitante num operacion id_bmi funcion_callback identificacion id_job tipo_transmision cod_ope
+    ]
+    if(is-job_s? turtle item 0 solicitud_procesando = true )[
+      
+      ask turtle id_solicitante[
+        envio_respuesta (list id num_ope cod_ope recv)]
+      if(cod_ope = 0)[
+        agregar_operacion_bmi_buffer id_solicitante num_ope operacion id_bmi funcion_callback identificacion id_job tipo_transmision cod_ope]
+    ]
+    
+    
+    
+    set comunicar_operacion_recv_bmi? false 
+    
+  ]
+  [
+    let info_ope_bmi first filter[item 1 ? = num_operacion_procesando] buffer
+    let bmi_cliente item 3 info_ope_bmi
+    let id item 5 info_ope_bmi
+    let posicion position info_ope_bmi buffer
+    let recv recepcion_mensaje bmi_cliente id ;;item 2 solicitud_procesando
+    ifelse(recv != -1)[
+      set info_ope_bmi replace-item 8 info_ope_bmi 1
+      set info_ope_bmi lput recv info_ope_bmi
+      set buffer replace-item posicion buffer info_ope_bmi
+    ]
+    [
+      ;if(item 7 info_ope_bmi = "inesperado")[
+        set buffer remove-item posicion buffer
+        set buffer lput info_ope_bmi buffer
+      ;]
+    ]
+    
+  ]
+  set estado task esperar_bmi_s
+   set color violet + 1
+end
+
+to comprobar_operacion_bmi_s
+  ;;id_capaorigen num_operacion operacion id_bmidst identificacion funcion_callback id_opejob tipo_transmision info_operacion
+  let id who
+  ;;lista de bmi completos
+  let lista_completos filter [item 8 ? = 1] buffer
+  ;hatch-datas 1[
+  ;      set capa desc_bmis
+  ;      set funciones_tiempos []
+  ;      set funciones_tiempos lput "bmi_tcp_testcontext()" funciones_tiempos
+  ;      escribir_output
+  ;      die
+  ; ]
+  ifelse(length lista_completos > 0)[
+    ;; show "comunico a JOB de operaciones BMI completas"
+    let num_ope item 1 solicitud_procesando
+    ask capasup_j[
+      envio_respuesta (list id num_ope lista_completos) ]
+    foreach lista_completos[
+      set buffer remove ? buffer
+    ]
+  ]
+  [
+    let id_i who
+    ;;show "comunico a job de operaciones BMI completas"
+    let num_ope item 1 solicitud_procesando
+    ask capasup_j[
+      envio_respuesta (list id_i num_ope false)]
+  ]
+  ;; show "verifico operaciones BMI incompletas"
+  let lista_incompletos filter [item 8 ? = 0] buffer
+  
+  ifelse(length lista_incompletos > 0)[
+   
+    let operacion_incompleta first lista_incompletos
+    let operacion_ item 2 operacion_incompleta
+    set num_operacion_procesando item 1 operacion_incompleta 
+    
+    if(operacion_ = "send")[
+      set estado task comunicacion_envio_s
+    ]
+    if(operacion_ = "receive")[
+      set estado task comunicacion_recepcion_s
+    ]
+  ]
+  ; ]
+  [
+    set estado task esperar_bmi_s
+  ]
+  set color violet + 1
+end
+
+;;;;;;;;;;;;;;
+
+;;;añadir a buffer
+to agregar_operacion_bmi_buffer [id_capaorigen num_operacion operacion_ id_bmidst funcion_callback identificacion id_opejob tipo_transmision info_operacion]
+  let nuevo_operacion_bmi (list id_capaorigen num_operacion operacion_ id_bmidst funcion_callback identificacion id_opejob tipo_transmision info_operacion)
+  set buffer lput nuevo_operacion_bmi buffer
+end
+
+to-report get_id_bmi_servidor
+  set num_operacion_bmi_servidor num_operacion_bmi_servidor + 1
+  report num_operacion_bmi_servidor
+end
+

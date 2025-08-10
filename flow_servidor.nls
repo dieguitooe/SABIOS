@@ -1,0 +1,370 @@
+__includes["data.nls"]
+
+globals[desc_flows]
+;;;;;;;;;;
+;;;FLOW;;;
+;;;;;;;;;;
+;;;;codigo de publicacion 1 exitosa, 0 encolada, -1 error  
+;;buffer[idjob,num_ope_flow,tipo operacion,tipoorigendestino,id_destbmi,estado]
+
+to esperar_flow_s
+  set desc_flows (replace-item 3 descripcion "W-S")
+  ;;Verifico si existen solicitudes entrantes
+  if(length solicitudes > 0)[
+    set color violet
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_flow_s
+  ]
+end
+
+
+to decodificar_flow_s
+  ;;Determino el tipo de operacion a tratar transicionando al estado correspondiente
+  let operacion item 2 solicitud_procesando
+  if(operacion = "write")[
+    set estado task configurar_transmision_s]
+  if(operacion = "read")[
+    set estado task configurar_transmision_s]
+  if(operacion = "test_send_bmi")[
+    set estado task envio_datos_bmi]
+  if(operacion = "test_recv_bmi")[
+    set estado task recepcion_datos_bmi]
+  if(operacion = "test_write_trove")[
+    set estado task escribir_datos_trove]
+  if(operacion = "test_read_trove")[
+    set estado task leer_datos_trove] 
+  if(operacion = "flush_keyval") or (operacion = "flush_bstream")[
+    set estado task configurar_transmision_s]
+end
+
+to configurar_transmision_s
+  set id_flow get_id_flow_servidor
+  let num_flow id_flow
+  let id who
+  let id_ope_j item 0 solicitud_procesando
+  ;;Verificar origen y destino para configurar el callback correspondiente
+  let punto_origen_destino item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  let bmi_cliente item 1 solicitud_procesando
+  if(type_command = "write" or type_command = "read")[
+    let id_aux [nodo_id] of capasup
+    set nodo_id id_aux
+    hatch-datas 1[
+      set id_app id_aux
+      set capa "FLOW-S"
+      set funciones_tiempos []
+      set funciones_tiempos lput "fp_multiqueue_post()" funciones_tiempos
+      abrir_times capa "fp_multiqueue_post"
+      escribir_output
+      die
+    ]
+    hatch-datas 1[
+      set id_app id_aux
+      set capa "FLOW-S"
+      set funciones_tiempos []
+      set funciones_tiempos lput "bmi_send_callback_fn()" funciones_tiempos
+      abrir_times capa "bmi_send_callback_fn"
+      escribir_output
+      die
+    ]
+    hatch-datas 1[
+      set id_app id_aux
+      set capa "FLOW-S"
+      set funciones_tiempos []
+      set funciones_tiempos lput "bmi_write_callback_fn()" funciones_tiempos
+      abrir_times capa "bmi_write_callback_fn"
+      escribir_output
+      die
+    ]
+  ]
+  if(punto_origen_destino = "BMIaTROVE")[
+    ;;configurar transmision BMI a TROVE
+    show "enviar solicitud recv a capa bmi"
+    ask capainf_b[
+      envio_solicitud (list id id_ope_j "receive" bmi_cliente identificacion "test_recv_bmi" "inmediato" num_flow)]
+  ]
+  if(punto_origen_destino = "TROVEaBMI")[
+    ;;configurar transmision TROVE a BMI
+    show "enviar solicitud send a capa BMI"
+    ask capainf_b[
+      envio_solicitud (list id id_ope_j "send" bmi_cliente identificacion "test_send_bmi" "inmediato" num_flow "dato")]
+  ]
+  set estado task esperar_confirmacion_transmision_s
+  
+end
+
+to esperar_confirmacion_transmision_s
+  let id_capainf_b [who] of capainf_b
+  let respuesta respuesta_id_num_operacion id_capainf_b id_flow
+  if(empty? respuesta = false)[
+    show "enviar respuesta de configuracion transmision a capa JOB"
+    let id who
+    let id_ope_j item 0 solicitud_procesando
+    let tipo_orydes item 3 solicitud_procesando
+    let bmi_cliente item 1 solicitud_procesando
+    let operacion item 2 solicitud_procesando
+    let identificacion item 4 solicitud_procesando
+    let cod_error item 2 first respuesta
+    ask capasup[
+      envio_respuesta (list id id_ope_j 1)]
+    agregar_operacion_flow_buffer id_ope_j id_flow operacion tipo_orydes bmi_cliente identificacion 0
+    set estado task esperar_flow_s
+    set color violet + 1
+  ]
+end
+
+;;bmi_send_callbak_wrapper and bmi_callback_fn
+
+to envio_datos_bmi
+  ;;Verificar si flow esta completo
+  let info_flow first filter [item 0 ? = item 0 solicitud_procesando] buffer
+  let id_ope_j item 0 solicitud_procesando
+  ifelse(item 6 info_flow = 1)[
+    let id who
+    let cod_error item 6 info_flow
+    show "comunicar a capa JOB sobre FLOW COMPLETO"
+    if(type_command = "write" or type_command = "read")[
+      let id_aux [nodo_id] of capasup
+      set nodo_id id_aux
+      hatch-datas 1[
+        set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "bmi_send_callback_wrapper()" funciones_tiempos
+        abrir_times capa "bmi_send_callback_wrapper"
+        escribir_output
+        die
+      ]
+      hatch-datas 1[
+        set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "bmi_send_callback_fn()" funciones_tiempos
+        abrir_times capa "bmi_send_callback_fn"
+        escribir_output
+        die
+      ]
+    ]
+    ask capasup[
+      envio_respuesta (list id id_ope_j cod_error) 
+    ]
+    ;show "ENTRA"
+    set buffer remove info_flow buffer
+    set estado task esperar_flow_s
+    set color violet + 1
+  ]
+  [
+    ;;Enviar solicitud read a la capa TROVE
+    show "enviar solicitud read a capa TROVE"
+    let id who
+    set id_flow get_id_flow_servidor
+    let num_flow id_flow
+    ask capainf_t[
+      envio_solicitud (list id id_ope_j "read" "test_read_trove" "inmediato" num_flow)]
+
+    set estado task esperar_confirmacion_envio_bmi_s
+  ]
+  
+end
+
+to esperar_confirmacion_envio_bmi_s
+  let respuesta respuesta_id_num_operacion  [who] of capainf_t id_flow
+  if(empty? respuesta = false)[
+    set estado task esperar_flow_s
+    set color violet + 1
+  ]
+  
+end
+
+;;bmi recv callback 
+to recepcion_datos_bmi
+  ifelse(type_command = "flush_bstream" or type_command = "flush_keyval")
+  [
+    let id_ope_j item 0 solicitud_procesando
+    show word "enviar solicitud FLUSH a capa TROVE - " type_command
+    set id_flow get_id_flow_servidor
+    let num_flow id_flow
+    let id who
+    ask capainf_t[
+      envio_solicitud (list id id_ope_j type_command "test_write_trove" "inmediato" num_flow)]
+    set estado task esperar_confirmacion_recepcion_bmi_s
+    let info_flow first filter [item 0 ? = item 0 solicitud_procesando] buffer
+    let id_job item 0 solicitud_procesando
+    let posicion position info_flow buffer
+    set info_flow replace-item 6 info_flow  1
+    set buffer replace-item posicion buffer info_flow
+  ]
+  [
+    let id_ope_j item 0 solicitud_procesando
+    show "enviar solicitud write a capa TROVE"
+    let id_aux [nodo_id] of capasup
+    set nodo_id id_aux
+    hatch-datas 1[
+        set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "bmi_recv_callback_wrapper()" funciones_tiempos
+        abrir_times capa "bmi_recv_callback_wrapper"
+        escribir_output
+        die
+      ]
+    hatch-datas 1[
+      set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "bmi_recv_callback_fn()" funciones_tiempos
+        abrir_times capa "bmi_recv_callback_fn"
+        escribir_output
+        die
+      ]
+    set id_flow get_id_flow_servidor
+    let num_flow id_flow
+    let id who
+    ask capainf_t[
+      envio_solicitud (list id id_ope_j "write" "test_write_trove" "inmediato" num_flow)]
+    set estado task esperar_confirmacion_recepcion_bmi_s
+    let info_flow first filter [item 0 ? = item 0 solicitud_procesando] buffer
+    let id_job item 0 solicitud_procesando
+    let posicion position info_flow buffer
+    set info_flow replace-item 6 info_flow  1
+    set buffer replace-item posicion buffer info_flow
+    ]
+end
+
+to esperar_confirmacion_recepcion_bmi_s
+  let respuesta respuesta_id_num_operacion [who] of capainf_t id_flow
+  if(empty? respuesta = false)[
+    set estado task esperar_flow_s
+    set color violet + 1
+  ]
+end
+
+;;trove write callback
+to escribir_datos_trove
+  ;;Verifico si flow esta completo
+  let info_flow first filter [item 0 ? = item 0 solicitud_procesando] buffer
+  let id_job item 0 solicitud_procesando
+  ifelse(item 6 info_flow = 1)[
+    ;;comunicar flow completo
+    let id who
+    let cod_error item 6 info_flow
+    show "comunicar a capa JOB sobre FLOW COMPLETO"
+    if(type_command = "write" or type_command = "read")[
+      let id_aux [nodo_id] of capasup
+      set nodo_id id_aux
+      hatch-datas 1[
+        set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "trove_write_callback_wrapper()" funciones_tiempos
+        abrir_times capa "trove_write_callback_wrapper"
+        escribir_output
+        die
+      ]
+      hatch-datas 1[
+        set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "trove_write_callback_fn()" funciones_tiempos
+        abrir_times capa "trove_write_callback_fn"
+        escribir_output
+        die
+      ]
+    ]
+    ask capasup[
+      envio_respuesta (list id id_job cod_error)
+    ]
+    set estado task esperar_flow_s
+    set buffer remove info_flow buffer
+    set color violet + 1
+  ]
+  [
+    ;;enviar solicitud receive a bmi
+    show "enviar solicitud receive capa BMI"
+    let id who
+    set id_flow get_id_flow_servidor
+    let num_flow id_flow
+    let bmi_cliente item 4 info_flow
+    let identificacion item 5 info_flow
+    ask capainf_b[
+      envio_solicitud (list id id_job "receive" bmi_cliente identificacion "test_recv_bmi" "inmediato" num_flow)]
+    let posicion position info_flow buffer
+    set info_flow replace-item 6 info_flow  1
+    set buffer replace-item posicion buffer info_flow
+    set estado task esperar_confirmacion_escritura_trove
+  ]
+end
+
+to esperar_confirmacion_escritura_trove
+  let respuesta respuesta_id_num_operacion [who] of capainf_b id_flow
+  if(empty? respuesta = false)[
+    set estado task esperar_flow_s
+    set color violet + 1
+  ]
+  
+end
+
+;;trove read callback 
+to leer_datos_trove
+  ;;enviar solicitud a post send a bmi
+  show "envio solicitud send a capa BMI"
+  if(type_command = "write" or type_command = "read")[
+    let id_aux [nodo_id] of capasup
+    set nodo_id id_aux
+    hatch-datas 1[
+        set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "trove_read_callback_wrapper()" funciones_tiempos
+        abrir_times capa "trove_read_callback_wrapper"
+        escribir_output
+        die
+      ]
+    hatch-datas 1[
+        set id_app id_aux
+        set capa "FLOW-S"
+        set funciones_tiempos []
+        set funciones_tiempos lput "trove_read_callback_fn()" funciones_tiempos
+        abrir_times capa "trove_read_callback_fn"
+        escribir_output
+        die
+      ]
+    ]
+  let info_flow first filter [item 0 ? = item 0 solicitud_procesando] buffer
+  let id_job item 0 info_flow
+  let identificacion item 5 info_flow
+  let id who
+  set id_flow get_id_flow_servidor
+  let num_flow id_flow
+  let bmi_cliente item 4 info_flow
+  ask capainf_b[
+    envio_solicitud (list id id_job "send" bmi_cliente identificacion "test_send_bmi" "inmediato" num_flow "dato")]
+  set estado task esperar_confirmacion_lectura_trove
+
+  let posicion position info_flow buffer
+  set info_flow replace-item 6 info_flow  1
+  set buffer replace-item posicion buffer info_flow
+end
+
+
+to esperar_confirmacion_lectura_trove
+  let respuesta respuesta_id_num_operacion [who] of capainf_b id_flow
+   if(empty? respuesta = false)[
+    set estado task esperar_flow_s
+    set color violet + 1
+  ]
+end
+
+;;;añadir operacion flow a lista flows en proceso
+;;buffer[idjob,num_ope_flow,tipo operacion,tipoorigendestino,id_destbmi,estado]
+to agregar_operacion_flow_buffer [id_jobs num_ope_flow operacion_ tipo_orydes id_destbmi identificacion info_estado]
+  let nueva_operacion_flow (list id_jobs num_ope_flow operacion_ tipo_orydes id_destbmi identificacion info_estado)
+  set buffer lput nueva_operacion_flow buffer
+end
+
+to-report get_id_flow_servidor
+  set num_operacion_flow_servidor num_operacion_flow_servidor + 1
+  report num_operacion_flow_servidor
+end

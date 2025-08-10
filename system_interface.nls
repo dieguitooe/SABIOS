@@ -1,0 +1,237 @@
+;;;;;;;;;;;
+;;SYSTEM;;;
+;INTERFACE;
+;;;;;;;;;;;
+
+__includes["pvfs_open.nls" "pvfs_rw.nls" "pvfs_getattr.nls" "pvfs_flush.nls" "data.nls" "regresion.nls"]
+
+globals[desc_sysface]
+
+;;ESTADO ESPERAR 
+to esperar_system
+  set desc_sysface descripcion
+  ;;Verifico si existen solicitudes entrantes
+  if(length solicitudes > 0)[  
+    set color lime
+    show "solicitud"
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_system 
+   
+  ]
+end
+
+
+;;ESTADO DECODIFICAR 
+to decodificar_system
+  ;;Determino el tipo de operacion a tratar y transiciona al estado correspondiente 
+  ;let id_aux [who] of [capasup] of [capasup] of [capasup] of capasup 
+  ;show turtles-on patch-ahead 3
+  ;show id_aux
+  ;let x_aux xcor
+  ;let y_auxt ycor
+  ;show turtles-on patch-ahead 15
+  let id_aux -1
+  ifelse ([hidden?] of capainf = false)[set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 9][set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 12]
+  set nodo_id item 0 id_aux
+  show "decodificar operacion"
+  let operacion item 2 solicitud_procesando
+  if(operacion = "open")[
+    set estado task tratar_pvfs_open
+    hatch-datas 1[
+      set id_app item 0 id_aux
+      set capa desc_sysface
+      set funciones_tiempos []
+      set funciones_tiempos lput "PVFS_sys_create()" funciones_tiempos
+      let arch_size segment_count * block_size * number_of_compute_nodes
+      let factor 0
+      ifelse unit = "megabytes" [set factor arch_size / 1024] [set factor arch_size / 1048576]
+      let tiempo_aux sys_create factor
+      ifelse tiempo_aux < 0 [set tiempo (tiempo_aux * (- 1))] [set tiempo tiempo_aux]
+      ;abrir_times capa "PVFS_sys_create"
+      escribir_output
+      die
+    ]
+   ]
+  if(operacion = "write")[
+    set estado task tratar_pvfs_write
+    ifelse ([hidden?] of capainf = false)[set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 9][set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 12]
+    set nodo_id item 0 id_aux
+    hatch-datas 1[
+      set id_app item 0 id_aux
+      set capa desc_sysface
+      set funciones_tiempos []
+      set funciones_tiempos lput "PVFS_sys_write()" funciones_tiempos
+      let arch_size segment_count * block_size * number_of_compute_nodes
+      let factor 0
+      ifelse unit = "megabytes" [set factor arch_size / 1024] [set factor arch_size / 1048576]
+      let tiempo_aux sys_write_exp factor
+      ifelse tiempo_aux < 0 [set tiempo (tiempo_aux * (- 1))] [set tiempo tiempo_aux]
+      ;abrir_times capa "PVFS_sys_write"
+      escribir_output
+      die
+    ]
+   ]
+  if(operacion = "read")[
+    set estado task tratar_pvfs_read
+    ifelse ([hidden?] of capainf = false)[set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 9][set id_aux [who] of [turtles-at 1 1 ] of patch (xcor - 1 ) 12]
+    set nodo_id item 0 id_aux
+    hatch-datas 1[
+      set id_app item 0 id_aux
+      set capa desc_sysface
+      set funciones_tiempos []
+      set funciones_tiempos lput "PVFS_sys_read()" funciones_tiempos
+      let arch_size segment_count * block_size * number_of_compute_nodes
+      let factor 0
+      ifelse unit = "megabytes" [set factor arch_size / 1024] [set factor arch_size / 1048576]
+      let tiempo_aux sys_read_exp factor
+      ifelse tiempo_aux < 0 [set tiempo (tiempo_aux * (- 1))] [set tiempo tiempo_aux]
+      ;abrir_times capa "PVFS_sys_read"
+      escribir_output
+      die
+    ]
+   ]
+  if(operacion = "flush_keyval") or (operacion = "flush_bstream") [
+    set estado task tratar_pvfs_flush
+    ;hatch-datas 1[
+    ;  set capa desc_sysface
+    ;  set funciones_tiempos []
+    ;  set funciones_tiempos lput "PVFS_sys_flush()" funciones_tiempos
+    ;  escribir_output
+    ;  die
+    ;]
+   ]
+end
+
+
+;;ESTADO TRATAR OPEN
+to tratar_pvfs_open
+  ;;Configura una nueva maquina de estados para gestionar la apertura
+  ;;Para ello, crea un nuevo agente PVFS_OPEN
+  let id_solicitante item 0 solicitud_procesando
+  let id who
+  let operacion item 2 solicitud_procesando
+  ;;verificar
+  let id_job capainf
+  let turtle_aux -1 
+  ifelse ([hidden?] of capainf = false)[set turtle_aux item 0 [self] of [turtles-at 1 1] of patch (xcor + 10) (ycor) ][set turtle_aux item 0 [self] of [main_loops-at 1 1] of patch (xcor - 1) 6 ]
+  let bmi_servidor [who] of [capainf_b] of[capainf] of turtle_aux
+  hatch-pvfs_opens 1[
+    set id_system id
+    set id_capasup id_solicitante
+    set capainf_j id_job
+    set id_bmi_servidor bmi_servidor
+    ;;set operacion ope
+    show "Obtencion de atributos"
+    set estado task obtener_atributos_open
+    set solicitud_recv_enviada? false;;boolean que gestiona el envio de solicitud recepcion
+    set solicitud_send_enviada? false ;;boolean para gestionar el envio de solicitud envio
+    set shape "circle"
+    set size 0.8
+    setxy [xcor] of turtle id_system [ycor] of turtle id_system
+  ]
+  ;;Transicion a ESTADO ESPERAR
+  set estado task esperar_system
+end 
+
+
+;;ESTADO TRATAR READ
+to tratar_pvfs_read
+  ;;Configura una nueva maquina de estados para gestionar la lectura
+  ;;Para ello, crea un nuevo agente PVFS_RW
+;  ask main_loops [
+;    set solicitudes lput (list 0 0 0 "iniciar") solicitudes
+;  ]
+  let id_solicitante item 0 solicitud_procesando
+  let id who
+  let id_job capainf
+  let operacion item 2 solicitud_procesando
+  ;let bmi_servidor [who] of one-of bmis_servidor
+  let turtle_aux -1 
+  ifelse ([hidden?] of capainf = false)[set turtle_aux item 0 [self] of [turtles-at 1 1] of patch (xcor + 10) (ycor) ][set turtle_aux item 0 [self] of [main_loops-at 1 1] of patch (xcor - 1) 6 ]
+  let bmi_servidor [who] of [capainf_b] of[capainf] of turtle_aux
+  hatch-pvfs_rws 1 [
+    set id_capasup id_solicitante
+    set id_system id
+    set capainf_j id_job
+    set id_bmi_servidor bmi_servidor
+    set operacion_rw operacion
+    show "Obtencion de atributos"
+    set estado task obtener_atributos
+    set solicitud_recv_enviada? false
+    set solicitud_send_enviada? false
+    set shape "circle"
+    set size 0.8
+    setxy [xcor] of turtle id_system + 1 [ycor] of turtle id_system
+  ]
+  ;;Transicion a ESTADO ESPERAR 
+  set estado task esperar_system
+end 
+
+
+;;ESTADO TRATAR WRITE
+to tratar_pvfs_write
+  ;;Configura una nueva maquina de estados para gestionar la escritura
+  ;;Para ello, crea un nuevo agente PVFS_RW
+;  ask main_loops [
+;    set solicitudes lput (list 0 0 0 "iniciar") solicitudes
+;  ]
+  let id_A item 0 solicitud_procesando
+  let id who
+  let operacion item 2 solicitud_procesando
+  let id_job capainf
+  ;let bmi_servidor [who] of one-of bmis_servidor
+  let turtle_aux -1 
+  ifelse ([hidden?] of capainf = false)[set turtle_aux item 0 [self] of [turtles-at 1 1] of patch (xcor + 10) (ycor) ][set turtle_aux item 0 [self] of [main_loops-at 1 1] of patch (xcor - 1) 6 ]
+  let bmi_servidor [who] of [capainf_b] of[capainf] of turtle_aux
+  hatch-pvfs_rws 1 [
+    set id_capasup id_A
+    set id_system id
+    set capainf_j id_job
+    set id_bmi_servidor bmi_servidor
+    set operacion_rw operacion
+    show "Obtencion de atributos"
+    set estado task obtener_atributos
+    set solicitud_recv_enviada? false
+    set solicitud_send_enviada? false
+    set shape "circle"
+    set size 0.8
+    setxy [xcor] of turtle id_system + 1 [ycor] of turtle id_system
+  ]
+  ;;Transicion a ESTADO ESPERAR
+  set estado task esperar_system
+end
+
+;;ESTADO TRATAR FLUSH
+to tratar_pvfs_flush
+  ;;Configura una nueva maquina de estados para gestionar la escritura
+  ;;Para ello, crea un nuevo agente PVFS_FLUSH
+;  ask main_loops [
+;    set solicitudes lput (list 0 0 0 "iniciar") solicitudes
+;  ]
+  let id_A item 0 solicitud_procesando ;id de maquina superior
+  let id who                           ;id maquina actual
+  let operacion item 2 solicitud_procesando ;operacion
+  let id_job capainf                       ;id capa inferior
+  ;let bmi_servidor [who] of one-of bmis_servidor ;id servidor bmi
+  let turtle_aux -1 
+  ifelse ([hidden?] of capainf = false)[set turtle_aux item 0 [self] of [turtles-at 1 1] of patch (xcor + 10) (ycor) ][set turtle_aux item 0 [self] of [main_loops-at 1 1] of patch (xcor - 1) 6 ]
+  let bmi_servidor [who] of [capainf_b] of[capainf] of turtle_aux
+  hatch-pvfs_flushs 1 [
+    set id_capasup id_A
+    set id_system id
+    set capainf_j id_job
+    set id_bmi_servidor bmi_servidor
+    set operacion_flush operacion
+    show "Obtencion de atributos"
+    set estado task obtener_atributos_flush
+    set solicitud_recv_enviada? false
+    set solicitud_send_enviada? false
+    set shape "circle"
+    set size 0.8
+    setxy [xcor] of turtle id_system + 1 [ycor] of turtle id_system
+  ]
+  ;;Transicion a ESTADO ESPERAR
+  set estado task esperar_system
+end

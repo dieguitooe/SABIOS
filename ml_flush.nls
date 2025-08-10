@@ -1,0 +1,115 @@
+;;Maquina de estados que gestiona dos tipos de flush en MAINLOOP
+
+;;io_send_ack
+to procesar_solicitud_cliente_flush
+  show "procesar solicitud"
+  set color orange
+  ifelse(exists_file? = true)[
+    set ack? true
+  ]
+  [
+    set ack? false
+  ]
+  let bmi_cliente id_bmi_cliente
+  let identificacion id_mjs
+  show "enviar solicitud envio a capa JOB"
+  let id who
+  let num_ope 1
+  let info ack?
+  ask capainf_j[
+    envio_solicitud (list id num_ope "send" bmi_cliente identificacion "inmediato" info)]
+  set color 74
+  set estado task esperar_confirmacion_envio_ack_flush
+end
+
+to esperar_confirmacion_envio_ack_flush
+  show "esperar confirmacion envio ack"
+   let id_capainf_j [who] of capainf_j
+  let respuesta respuesta_id_num_operacion id_capainf_j 1
+  if(empty? respuesta = false) [ 
+    if(item 2 first respuesta = 1)[
+      if(ack? = false)[
+        set estado task finalizacion_operacion_flush
+      ]
+      if(ack? = true)[
+        set estado task configurar_flujo_flush
+      ]
+    ]
+  ]
+end
+
+;;io_start_flow
+to configurar_flujo_flush
+    set color orange
+    show "enviar solicitud job_flow a capa JOB"
+    let bmi_cliente id_bmi_cliente
+    let identificacion id_mjs
+    let id who
+    let operacion_ operacion_flush
+    let num_ope 2
+    ask capainf_j[
+      envio_solicitud (list id num_ope operacion_ bmi_cliente identificacion)]
+    set estado task esperar_configuracion_flush
+     set color 74
+end
+
+to esperar_configuracion_flush
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 2
+  if(empty? respuesta = false) [ 
+    set color orange
+    if(item 2 first respuesta = 1)[
+      ;show "Flow configurado comienzo de transferencia"
+      set estado task operacion_transferencia_flush
+    ]
+  ]
+end
+
+to operacion_transferencia_flush
+  ;;Verificar si el job que gestiona la transferencia se completo (item 1 = 1)
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 2
+  if(empty? respuesta = false) [ 
+    set color orange
+    if(item 2 first respuesta = 1)[
+      set estado task verificar_flujo_flush
+    ]
+  ]
+end 
+
+to verificar_flujo_flush
+  ;;Verificar flujo en el caso de que sea comando Write, enviar ack 
+  let bmi_cliente id_bmi_cliente
+  let identificacion id_mjs
+  set color orange
+  if(operacion_flush = "flush_keyval") or (operacion_flush = "flush_bstream")[
+    let id who 
+    let num_ope 3
+    ask capainf_j[
+      envio_solicitud (list id num_ope "send" bmi_cliente identificacion "inmediato" "")]
+    set estado task esperar_verificacion_ml_flush
+  ]
+  ;if(operacion_flush = "flush_keyval") or (operacion_flush = "flush_bstream")[
+  ;  show word "operacion flush realizada" operacion_flush
+  ;  set estado task finalizacion_operacion_flush
+  ;]
+  set color 74
+end 
+
+to esperar_verificacion_ml_flush
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 3
+  if(empty? respuesta = false) [ 
+    set color orange
+    if(item 2 first respuesta = 1)[
+      ;;job completo
+      show word "operacion flush realizada " operacion_flush
+      set estado task finalizacion_operacion_flush
+    ]
+  ]
+end
+
+to finalizacion_operacion_flush
+  set color orange
+  ask turtle mainloop[
+    set color violet + 1]
+  die
+  set color 74
+end 

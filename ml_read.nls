@@ -1,0 +1,63 @@
+;;;;;;;;;;;
+;;LECTURA;;
+;METADATOS;
+;;;;;;;;;;;
+
+
+;;Maquina de Estados
+
+to tratar_lectura_metadatos
+  set color orange
+  let id who
+  ;let aux [nodo_id] of main_loop mainloop
+  hatch-datas 1[
+      ;set id_app aux
+      set capa desc_ml
+      set funciones_tiempos []
+      set funciones_tiempos lput "getattr_get_dir_hint()" funciones_tiempos
+      abrir_times capa "getattr_get_dir_hint"
+      escribir_output
+      die
+   ]
+  show "enviar solicitud read keyval a capa JOB"
+  let num_ope 1
+  ask capainf_j[
+    envio_solicitud (list id num_ope "read_keyval" "inmediato")]
+  set estado task esperar_lectura_metadatos
+  set color 74
+  
+end
+
+to esperar_lectura_metadatos
+  set color orange
+  let bmi_cliente id_bmi_cliente
+  let resp respuesta_id_num_operacion [who] of capainf_j 1
+  let identificacion id_mjs
+  let dato ""
+  if(exists_file? = false)[
+    set dato false
+  ]
+  if(empty? resp = false) [ 
+    if(item 2 first resp = 1)[
+      let id who
+      show "enviar solicitud send a capa JOB"
+      ask capainf_j[
+        envio_solicitud (list id 2 "send" bmi_cliente identificacion "inmediato" dato)]
+      set estado task finalizar_operacion_lectura
+    ]
+  ] 
+  set color 74
+end
+
+
+to finalizar_operacion_lectura
+  let resp respuesta_id_num_operacion [who] of capainf_j 2
+  if(empty? resp = false) [ 
+    if(item 2 first resp = 1)[                                                            
+      show "operacion lectura metadatos realizada"
+      ask turtle mainloop[
+        set color violet + 1]
+      die
+    ]
+  ]
+end

@@ -1,0 +1,213 @@
+__includes["data.nls"]
+
+globals[desc_flowc]
+
+;;;;;;;;;;
+;;;FLOW;;;
+;;;;;;;;;;
+;;;;codigo de publicacion 1 exitosa, 0 encolada, -1 error  
+;;buffer[idjob,num_ope_flow,tipo operacion,tipoorigendestino,id_destbmi,estado]
+
+to esperar_flow
+  set desc_flowc descripcion
+  ;;Verifico si existen solicitudes entrantes
+  if(length solicitudes > 0)[
+    set color lime
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_flow
+    set solicitud_procesando first solicitudes
+    set solicitudes remove solicitud_procesando solicitudes
+  ]
+end
+
+
+to decodificar_flow
+  ;;Determino el tipo de operacion a tratar transicionando al estado correspondiente
+  show "decodificar operacion"
+  let operacion item 2 solicitud_procesando
+  if(operacion = "write") or (operacion = "flush_keyval") or (operacion = "flush_bstream")[
+    set estado task configurar_transmision]
+  if(operacion = "read")[
+    set estado task configurar_transmision]
+  if(operacion = "bmi_a_mem")[
+    set estado task transferencia_bmi_a_mem]
+  if(operacion = "mem_a_bmi")[
+    set estado task transferencia_mem_a_bmi]
+  
+end
+
+
+to configurar_transmision
+  let id who
+  let id_ope_j item 0 solicitud_procesando
+  let operacion item 2 solicitud_procesando
+  let bmi_servidor item 1 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  set id_flow get_id_flow_cliente
+  let num_flow id_flow
+  ;;Verificar origen y destino para configurar el callback correspondiente
+  let punto_origen_destino item 3 solicitud_procesando
+  let id_aux [nodo_id] of capasup
+  set nodo_id id_aux
+     hatch-datas 1[
+      set id_app id_aux
+      set capa desc_flowc
+      set funciones_tiempos []
+      set funciones_tiempos lput "fp_multiqueue_post()" funciones_tiempos
+      abrir_times capa "fp_multiqueue_post"
+      escribir_output
+      die
+  ]
+  if(punto_origen_destino = "BMIaMEM")[
+    show "solicitud receive a capa BMI"
+    ask capainf_b[
+      envio_solicitud (list id id_ope_j "receive" bmi_servidor identificacion "bmi_a_mem" "inmediato" num_flow)]
+  ]
+  if(punto_origen_destino = "MEMaBMI")[
+    show "solicitud send a capa BMI"
+    ask capainf_b[
+      envio_solicitud (list id id_ope_j "send" bmi_servidor identificacion "mem_a_bmi" "inmediato" num_flow)]
+  ]
+  set estado task esperar_confirmacion_transmision
+  
+end
+
+to esperar_confirmacion_transmision
+  ;;id_ope_job num_ope operacion tipo_orydes id_destbmi identificacion info_estado
+  let respuesta respuesta_id_num_operacion [who] of capainf_b id_flow
+  if(empty? respuesta = false)[
+    show "enviar respuesta de configuracion transmision a capa JOB"
+    let id who
+    let cod_publicacion item 2 first respuesta
+    let id_job item 0 solicitud_procesando
+    let operacion_ item 2 solicitud_procesando
+    let tipo_orydes item 3 solicitud_procesando
+    let id_bmi item 1 solicitud_procesando
+    let iden item 4 solicitud_procesando
+    ask capasup[
+      envio_respuesta (list id id_job 1)
+    ]
+    agregar_operacion_f_buffer id_job id_flow operacion_ tipo_orydes id_bmi iden 0
+    set estado task esperar_flow
+    set color green + 1
+  ]
+end
+
+to transferencia_bmi_a_mem
+  let info_flow first filter [item 0 ? = item 0 solicitud_procesando] buffer
+  ;;Verifico si el flow se completo
+  ifelse(item 6 info_flow = 1)[
+    let id who
+    let id_ope_job item 0 info_flow
+    let cod_error item 6 info_flow
+    show "comunicar a capa JOB sobre FLOW COMPLETO"
+    let id_aux [nodo_id] of capasup
+    set nodo_id id_aux
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_flowc
+      set funciones_tiempos []
+      set funciones_tiempos lput "bmi_to_mem_callback_fn()" funciones_tiempos
+      abrir_times capa "bmi_to_mem_callback_fn"
+      escribir_output
+      die
+    ]
+    ask capasup[
+      envio_respuesta (list id id_ope_job cod_error)
+    ]
+    set estado task esperar_flow
+    set buffer remove info_flow buffer
+    set color green + 1
+  ]
+  [
+    ;;Sino se completo enviar solicitud receive a bmi
+    show "enviar solicitud receive  capa BMI"
+    let id who
+    let id_ope_j item 0 solicitud_procesando
+    let iden item 5 info_flow
+    let bmi_servidor item 4 info_flow
+    set id_flow get_id_flow_cliente
+    let num_flow id_flow
+    ask capainf_b[
+      envio_solicitud (list id id_ope_j "receive" bmi_servidor iden "bmi_a_mem" "inmediato" num_flow)]
+    set estado task esperar_confirmacion_bmi_a_mem
+    ;;Modifico a Flow completo ;;;;;;;;;;;;;;;;;;;;;;;;
+    let posicion position info_flow buffer
+    set info_flow replace-item 6 info_flow 1
+    set buffer replace-item posicion buffer info_flow 
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ]
+  
+end
+
+to esperar_confirmacion_bmi_a_mem
+  let respuesta respuesta_id_num_operacion [who] of capainf_b id_flow
+  if(empty? respuesta = false)[
+    set estado task esperar_flow
+    set color green + 1
+  ]
+  
+end
+
+to transferencia_mem_a_bmi
+  let id who
+  let info_flow first filter [item 0 ? = item 0 solicitud_procesando] buffer
+  let id_ope_j item 0 info_flow
+  ;;Verificar si el Flow se ha completado
+  ifelse(item 6 info_flow = 1)[
+    show "comunicar a capa JOB sobre FLOW COMPLETO"
+    let id_aux [nodo_id] of capasup
+    set nodo_id id_aux
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_flowc
+      set funciones_tiempos []
+      set funciones_tiempos lput "mem_to_bmi_callback_fn()" funciones_tiempos
+      abrir_times capa "mem_to_bmi_callback_fn"
+      escribir_output
+      die
+    ]
+    let cod_error item 6 info_flow
+    ask capasup[
+      envio_respuesta (list id id_ope_j cod_error)
+    ]
+    set estado task esperar_flow
+    set buffer remove info_flow buffer
+    set color green + 1
+  ]
+  [
+    ;;Sino enviar solicitud send a bmi
+    show "enviar solicitud send  capa BMI"
+    let identificacion item 5 info_flow
+    let bmi_servidor item 4 info_flow
+      set id_flow get_id_flow_cliente
+    let num_flow id_flow
+    ask capainf_b[
+      envio_solicitud (list id id_ope_j "send" bmi_servidor identificacion "mem_a_bmi" "inmediato" num_flow)]
+    set estado task esperar_confirmacion_mem_a_bmi
+    
+    let posicion position info_flow buffer
+    set info_flow replace-item 6 info_flow 1
+    set buffer replace-item posicion buffer info_flow 
+  ]
+  
+end
+
+to esperar_confirmacion_mem_a_bmi
+  let respuesta respuesta_id_num_operacion [who] of capainf_b id_flow
+  if(empty? respuesta = false)[
+    set estado task esperar_flow
+    set color green + 1
+  ]
+end
+
+;;;añadir operacion flow a lista flows en proceso
+to agregar_operacion_f_buffer [id_ope_job num_ope operacion_ tipo_orydes id_destbmi identificacion info_estado]
+  let nueva_operacion_flow (list id_ope_job num_ope operacion_ tipo_orydes id_destbmi identificacion info_estado)
+  set buffer lput nueva_operacion_flow buffer
+end
+
+to-report get_id_flow_cliente
+  set num_operacion_flow num_operacion_flow + 1
+  report num_operacion_flow
+end

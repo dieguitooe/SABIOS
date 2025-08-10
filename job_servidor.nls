@@ -1,0 +1,461 @@
+__includes["data.nls"]
+
+globals[desc_jobs]
+;;;;;;;;;;
+;;;JOB;;;;
+;SERVIDOR;
+;;;;;;;;;;
+
+;;jobs [id_nuevo_job id_meinvocadora tipo_operacion num_operacion cod_pub]
+
+;;ESTADO ESPERAR
+to esperar_job_servidor
+  ;set desc_jobs (replace-item 2 descripcion "B-S")
+  set desc_jobs "JOB-S"
+  ;;Verifico si existen solicitudes entrantes
+  ;;En caso, negativo procedo a generar una solicitud para testear
+  ifelse(length solicitudes > 0)[
+    set color violet
+    ;;Transicion a ESTADO DECODIFICAR
+    set solicitud_procesando first solicitudes
+    ;show solicitud_procesando
+    set solicitudes remove-item 0 solicitudes
+    set estado task decodificar_job_servidor  
+  ]
+  [
+    set solicitud_procesando [0 0 "test"]
+    set estado task decodificar_job_servidor
+  ]
+  
+end
+
+
+to decodificar_job_servidor
+  ;;Determino el tipo de operacion a tratar y transiciono al estado correspondiente
+  let operacion item 2 solicitud_procesando
+  if(operacion = "send")[
+    set estado task tratar_job_servidor_send]
+  if(operacion = "receive")[
+    set estado task tratar_job_servidor_recv]
+  if(operacion = "read")[
+    set estado task configurar_flow_s]
+  if(operacion = "write")[
+    set estado task configurar_flow_s]
+  if(operacion = "write_keyval")[
+    set estado task tratar_job_write_metadatos]
+  if(operacion = "read_keyval")[
+    set estado task tratar_job_read_metadatos]
+  if(operacion = "test")[
+    set estado task verificar_job_operacion_s] 
+  if(operacion = "flush_keyval") or (operacion = "flush_bstream")[
+    set estado task configurar_flow_flush]
+end
+
+
+to configurar_flow_s
+  ;;Configura los parametros que va ha enviarle a la capa FLOW para establecer la transmision 
+  set id_j get_id_job
+  let id_job_nuevo id_j
+  let id_capa who
+  let tipo_operacion item 2 solicitud_procesando
+  let punto_origen_destino ""
+  let bmi_cliente item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  if(tipo_operacion = "read")[
+    set punto_origen_destino "TROVEaBMI"
+  ]
+  if(tipo_operacion = "write")[
+    set punto_origen_destino "BMIaTROVE"
+  ]
+  show "enviar solicitud read/write a capa FLOW"
+  
+  set nodo_id [nodo_id] of capasup
+  let id_aux nodo_id
+  ;show nodo_id
+  hatch-datas 1[
+    set  id_app id_aux
+    set capa desc_jobs
+    set funciones_tiempos []
+    set funciones_tiempos lput "job_flow()" funciones_tiempos
+    abrir_times capa "job_flow"
+    escribir_output
+    die
+  ]
+  ask capainf_f[
+    envio_solicitud (list id_job_nuevo bmi_cliente tipo_operacion punto_origen_destino identificacion)] 
+  set estado task esperar_confirmacion_flow_s
+end
+
+to configurar_flow_flush
+  ;;Configura los parametros que va ha enviarle a la capa FLOW para establecer la transmision 
+  set id_j get_id_job
+  let id_job_nuevo id_j
+  let id_capa who
+  let tipo_operacion item 2 solicitud_procesando
+  let punto_origen_destino ""
+  let bmi_cliente item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  if(tipo_operacion = "flush_keyval") or (tipo_operacion = "flush_bstream")[
+    set punto_origen_destino "BMIaTROVE"
+  ]
+  show word "enviar solicitud FLUSH a capa FLOW - " tipo_operacion
+  
+  ;hatch-datas 1[
+  ;  set capa desc_jobs
+  ;  set funciones_tiempos []
+  ;  set funciones_tiempos lput (word "job_trove_" remove "flush_" type_command "_flush()") funciones_tiempos
+  ;  escribir_output
+  ;  die
+  ;]
+  ask capainf_f[
+    envio_solicitud (list id_job_nuevo bmi_cliente tipo_operacion punto_origen_destino identificacion)] 
+  set estado task esperar_confirmacion_flow_s
+end
+
+to esperar_confirmacion_flow_s
+  ;;Verifico si ha llegado la respuesta de la capa FLOW
+  ;;En caso afirmativo, primero envio la respuesta a la capa SYSTEM INTERFACE
+  ;; y luego, agrego la operacion job al buffer para luego testear si se completo la operacion (VERIFICAR ESTE PASO)
+  let respuesta respuesta_id_num_operacion [who] of capainf_f id_j
+  let num_ope item 1 solicitud_procesando
+  if(empty? respuesta = false)[
+    let id who
+    let id_meinvocadora item 0 solicitud_procesando 
+    show (word "enviar respuesta a Sub-Maquina Estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+    ask turtle id_meinvocadora[
+      envio_respuesta (list id num_ope 1)]
+    
+    agregar_job_servidor_en_buffer id_j item 0 solicitud_procesando item 2 solicitud_procesando item 1 solicitud_procesando item 2 first respuesta
+    set estado task esperar_job_servidor
+    set color violet + 1
+  ]
+end
+
+to tratar_job_servidor_send
+  ;;Envio solicitud send a la capa BMI
+  set id_j get_id_job
+  let id_job_nuevo id_j
+  let bmi_cliente item 3 solicitud_procesando
+  let identificacion item 4 solicitud_procesando
+  let tipo_transmision item 5 solicitud_procesando
+  let dato item 6 solicitud_procesando
+  show "enviar solicitud envio a capa BMI"
+  set nodo_id [nodo_id] of capasup
+  ;show nodo_id
+  let id_aux nodo_id
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_jobs
+    set funciones_tiempos []
+    set funciones_tiempos lput "job_bmi_send_list()" funciones_tiempos
+    abrir_times capa "job_bmi_send_list"
+    escribir_output
+    die
+  ]
+  let id who
+  ask capainf_b[
+    envio_solicitud (list id id_job_nuevo "send" bmi_cliente identificacion "" tipo_transmision dato)
+  ]
+  set estado task esperar_confirmacion_send_s
+end
+
+to esperar_confirmacion_send_s
+  ;;Verifico si ha llegado la respuesta de la capa FLOW (ID CAPA Y NUM OPERACION)
+  ;;En caso afirmativo, si la respuesta es 0 (encolada) agrego la operacion job al buffer para luego testear 
+  ;; y luego, envio la respuesta a la capa MAIN LOOP
+  let respuesta respuesta_id_num_operacion [who] of capainf_b id_j
+  let num_ope item 1 solicitud_procesando
+  if(empty? respuesta = false)[
+    if(item 2 first respuesta = 0)[
+      agregar_job_servidor_en_buffer id_j item 0 solicitud_procesando item 2 solicitud_procesando item 1 solicitud_procesando item 2 first respuesta
+    ]
+    let id who 
+    let id_meinvocadora item 0 solicitud_procesando 
+    let cod_error item 2 first respuesta
+    show (word "enviar respuesta a Sub-Maquina Estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+    set nodo_id [nodo_id] of capasup
+    let id_aux nodo_id
+    hatch-datas 1[
+      set id_app id_aux
+      set capa desc_jobs
+      set funciones_tiempos []
+      set funciones_tiempos lput "job_trove_keyval_read_list()" funciones_tiempos
+      abrir_times capa "job_trove_keyval_read_list"
+      escribir_output
+      die
+    ]
+    ask turtle id_meinvocadora[
+      envio_respuesta (list id num_ope cod_error)]
+    
+    set estado task esperar_job_servidor
+    set color violet + 1
+  ]
+end
+
+to tratar_job_servidor_recv
+  
+  ;;Envio solicitud receive a la capa BMI
+  let bmi_cliente item 3 solicitud_procesando
+  let identificador item 4 solicitud_procesando
+  let tipo_transmision item 5 solicitud_procesando
+  show "enviar solicitud RECV a capa BMI"
+  let id who
+  set id_j get_id_job
+  let id_job_nuevo id_j
+  ask capainf_b[
+    envio_solicitud (list id id_job_nuevo "receive" bmi_cliente identificador "" tipo_transmision)]
+  set estado task esperar_confirmacion_recv_s
+end
+
+to esperar_confirmacion_recv_s
+  ;;Verifico si ha llegado la respuesta de la capa FLOW (ID CAPA Y NUM OPERACION)
+  ;;En caso afirmativo, si la respuesta es 0 (encolada) agrego la operacion job al buffer para luego testear 
+  ;; y luego, envio la respuesta a la capa MAIN LOOP
+  let respuesta respuesta_id_num_operacion [who] of capainf_b id_j
+  if(empty? respuesta = false)[
+    if(item 2 first respuesta = 0 or item 5 solicitud_procesando = "inesperado")[
+      agregar_job_servidor_en_buffer id_j item 0 solicitud_procesando item 2 solicitud_procesando item 1 solicitud_procesando item 2 first respuesta
+    ]
+    ; show "enviar respuesta recv a capa MAIN LOOP"
+    ;let id who 
+    ;let cod_error item 2 first respuesta
+    ;;Por el momento solo MAIN LOOP invoca esta funcion por lo cual no se regresa respuesta
+    set estado task esperar_job_servidor
+    set color violet + 1
+  ]
+end
+
+to tratar_job_read_metadatos
+  ;;Envio solicitud read_keyval a la capa TROVE
+  let id who
+  set id_j get_id_job
+  let id_job_nuevo id_j
+  let tipo_requerimiento item 3 solicitud_procesando
+  show "enviar solicitud lectura keyval a capa TROVE"
+  ask capainf_t[
+    envio_solicitud (list id id_job_nuevo "read_keyval" "" tipo_requerimiento)]
+  set estado task esperar_confirmacion_readtrove_s
+end
+
+to esperar_confirmacion_readtrove_s
+  ;;Verifico si ha llegado la respuesta de la capa TROVE (ID CAPA Y NUM OPERACION)
+  ;;En caso afirmativo, si la respuesta es 0 (encolada) agrego la operacion job al buffer para luego testear 
+  ;; y luego, envio la respuesta a la capa MAIN LOOP
+  let respuesta respuesta_id_num_operacion [who] of capainf_t id_j
+  let num_ope item 1 solicitud_procesando
+  if(empty? respuesta = false)[
+    if(item 2 first respuesta = 0)[
+      agregar_job_servidor_en_buffer id_j item 0 solicitud_procesando item 2 solicitud_procesando item 1 solicitud_procesando item 2 first respuesta
+    ]
+    let id who
+    let id_meinvocadora item 0 solicitud_procesando 
+    let cod_error item 2 first respuesta
+    show (word "enviar respuesta a Sub-Maquina Estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+    ask turtle id_meinvocadora[
+      envio_respuesta (list id num_ope cod_error)]
+    
+    set estado task esperar_job_servidor
+    set color violet + 1
+  ]
+end
+
+
+to tratar_job_write_metadatos
+  ;;Envio solicitud Write Keyval a la capa TROVE
+  let id who
+  set id_j get_id_job
+  let id_job_nuevo id_j
+  let tipo_requerimiento item 3 solicitud_procesando
+  show "enviar solicitud WRITE KEYVAL a capa TROVE"
+  set nodo_id [nodo_id] of capasup
+  let id_aux nodo_id
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_jobs
+    set funciones_tiempos []
+    set funciones_tiempos lput "job_trove_keyval_write_list()" funciones_tiempos
+    abrir_times capa "job_trove_keyval_write_list"
+    escribir_output
+    die
+  ]
+  ask capainf_t[
+    envio_solicitud (list id id_job_nuevo "write_keyval" "" tipo_requerimiento)]
+  set estado task esperar_confirmacion_writetrove_s
+end
+
+to esperar_confirmacion_writetrove_s
+  ;;Verifico si ha llegado la respuesta de la capa TROVE (ID CAPA Y NUM OPERACION)
+  ;;En caso afirmativo, si la respuesta es 0 (encolada) agrego la operacion job al buffer para luego testear 
+  ;; y luego, envio la respuesta a la capa MAIN LOOP
+  let respuesta respuesta_id_num_operacion [who] of capainf_t id_j
+  let num_ope item 1 solicitud_procesando
+  if(empty? respuesta = false)[
+    if(item 2 first respuesta = 0)[
+      agregar_job_servidor_en_buffer id_j item 0 solicitud_procesando item 2 solicitud_procesando item 1 solicitud_procesando item 2 first respuesta
+    ]
+    let id who 
+    let id_meinvocadora item 0 solicitud_procesando 
+    let cod_error item 2 first respuesta
+    show (word "enviar respuesta a Sub-Maquina Estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+    ask turtle id_meinvocadora[
+      envio_respuesta (list id num_ope cod_error)]
+    
+    set estado task esperar_job_servidor
+    set color violet + 1
+  ]
+end
+
+to verificar_job_operacion_s
+  ;;Envio solicitud TEST a las capas BMI y TROVE
+  let id_jobs who
+  set id_j get_id_job
+  let id_job id_j
+  ;;show "enviar solicitud test a capa BMI"
+  ask capainf_b[
+    envio_solicitud (list id_jobs id_job "test") ]
+  ;;show "enviar solicitud test a capa TROVE"
+  ask capainf_t [
+    envio_solicitud (list id_jobs id_job "test")]
+  set estado task esperar_confirmaciones
+end
+
+to esperar_confirmaciones
+  ;;Verificar la llegada de las respuestas correspondientes a las capas BMI y TROVE en funcion de la solicitud test enviada previamente
+  ;;Asimismo, verifica si ha llegado alguna respuesta de la capa FLOW indicando que se ha completado un flow configurado
+  ;;Finaliza cuando se ha analizado las respuestas de las capas BMI, TROVE y FLOW
+  let lista_ope_bmi_completas respuesta_id_num_operacion [who] of capainf_b id_j
+  let lista_ope_trove_completas respuesta_id_num_operacion [who] of capainf_t id_j
+  ;show lista_ope_bmi_completas
+  if(empty? lista_ope_bmi_completas = false)[
+    set confirmacion_bmi? true
+    ifelse(item 2 first lista_ope_bmi_completas = false)[ 
+      ;  
+    ]
+    [
+      ;id_capaorigen num_operacion operacion id_bmidst funcion_callback identificacion id_opejob tipo_transmision info_operacion]
+      foreach item 2 first lista_ope_bmi_completas [
+        if(item 4 ? != "")[ 
+          let id_ope_job item 6 ?
+          let tipo_operacion item 4 ?
+          let bmi_cliente item 3 ?
+          show "enviar ejecucion callback a capa FLOW" 
+          let id who ask capainf_f[ 
+            envio_solicitud (list id_ope_job who tipo_operacion bmi_cliente) ]
+        ]
+        if(item 4 ? = "")[ 
+          let info_job get_info_job item 6 ?
+          if(empty? info_job = false)[
+            let id who
+            let num_ope item 3 first info_job
+            
+            let id_meinvocadora item 1 first info_job 
+            if(data_in_system = "No_cache")[
+            ifelse(is-mdt_main_loop? turtle id_meinvocadora)[
+              show "Comunicar de nueva solicitud a capa MAIN LOOP" 
+              let solicitud item 9 ?
+              ask mdt_main_loop item 1 first info_job[
+                envio_respuesta (list id 1 solicitud)]
+            ]
+            [ 
+              show (word "Comunicar de operacion completa a submaquina estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+              ask turtle id_meinvocadora[
+                envio_respuesta (list id num_ope 1)]
+            ]
+            ]
+            ifelse(is-main_loop? turtle id_meinvocadora)[
+              show "Comunicar de nueva solicitud a capa MAIN LOOP" 
+              let solicitud item 9 ?
+              ask main_loop item 1 first info_job[
+                envio_respuesta (list id 1 solicitud)]
+            ]
+            [ 
+              show (word "Comunicar de operacion completa a submaquina estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+              ask turtle id_meinvocadora[
+                envio_respuesta (list id num_ope 1)]
+            ]
+            
+            set buffer remove first info_job buffer
+          ]
+        ]
+      ]
+      
+    ]
+    
+  ]
+  if(empty? lista_ope_trove_completas = false)[
+    set confirmacion_trove? true
+    ifelse(item 2 first lista_ope_trove_completas = false)[   
+      
+    ]
+    [
+      foreach item 2 first lista_ope_trove_completas [
+        if(item 4 ? != "")[
+          let id_ope_job item 3 ?
+          let tipo_operacion item 4 ?
+          show "enviar ejecucion callback a capa FLOW trove"
+          let id who ask capainf_f[ 
+            envio_solicitud (list id_ope_job who tipo_operacion) ]
+        ]
+        if(item 4 ? = "")[ 
+          let info_job get_info_job item 3 ?
+          if(empty? info_job = false)[
+            let id who
+            let num_ope item 3 first info_job
+            
+            let id_meinvocadora item 1 first info_job 
+            show (word "Comunicar de operacion completa a submaquina estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+            ask turtle id_meinvocadora[
+              envio_respuesta (list id num_ope 1)]
+            
+            set buffer remove first info_job buffer
+          ]
+        ]
+      ]
+    ]
+  ]
+  ;;verificar si se completo algun flow
+  let id_capainf_f [who] of capainf_f
+  let lista_flow_completo respuesta_id id_capainf_f
+  if(empty? lista_flow_completo = false)[
+    ;;comunicar a ME correspondiente
+    foreach lista_flow_completo[
+      let num_job item 1 ?
+      let info_job get_info_job num_job
+      if(empty? info_job = false)[
+        let id who
+        let num_ope item 3 first info_job
+        
+        let id_meinvocadora item 1 first info_job 
+        show (word "Comunicar de operacion completa a submaquina estados MAIN LOOP " [breed] of turtle id_meinvocadora)
+        ask turtle id_meinvocadora[
+          envio_respuesta (list id num_ope 1)]
+        
+        set buffer remove first info_job buffer
+      ]
+    ]  
+  ]
+  
+  if(confirmacion_bmi? = true and confirmacion_trove? = true)[
+    set estado task esperar_job_servidor
+    set confirmacion_bmi? false
+    set confirmacion_trove? false
+  ]
+end
+
+
+to-report get_info_job [num_job]
+  let resp filter[ item 0 ? = num_job ] buffer
+  report resp
+end
+
+;;añadir operacion job en el buffer (lista de jobs en procesos de completarse) 
+to agregar_job_servidor_en_buffer [num_id_job id_me operacion_ num_operacion info_operacion]
+  let nueva_operacion_job (list num_id_job id_me operacion_ num_operacion info_operacion)
+  set buffer lput nueva_operacion_job buffer
+end
+
+;;nuevo id para operacion JOB
+to-report get_id_job
+  set num_operacion_job_servidor num_operacion_job_servidor + 1
+  report num_operacion_job_servidor
+end

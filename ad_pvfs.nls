@@ -1,0 +1,235 @@
+__includes["data.nls"]
+
+globals[desc_adpvfs]
+;;;;;;;;;;;
+;;AD PVFS;;
+;;;;;;;;;;;
+
+;;ESTADO ESPERAR
+to esperar_ad_pvfs
+  set desc_adpvfs descripcion
+  ;;Verifico si existen solicitud entrantes
+  if(length solicitudes > 0)[
+    set color blue
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_ad_pvfs 
+  ]
+end
+
+
+;;ESTADO DECODIFICAR
+to decodificar_ad_pvfs
+  ;;Determino el tipo de operacion a tratar y transiciono al estado correspondiente
+  show "decodificar operacion"
+  let operacion item 2 solicitud_procesando
+  if(operacion = "open")[
+    set estado task tratar_ad_pvfs_open]
+  if(operacion = "write")[
+    set estado task tratar_ad_pvfs_write]
+  if(operacion = "read")[
+    set estado task tratar_ad_pvfs_read]
+  if(operacion = "close")[
+    set estado task tratar_ad_pvfs_close]
+  if(operacion = "flush_bstream" ) or (operacion = "flush_keyval")[
+    set estado task tratar_ad_pvfs_flush]
+end
+  
+
+;;ESTADO TRATAR OPEN
+to tratar_ad_pvfs_open
+  ;;Se procede a enviar una solicitud OPEN a la capa SYSTEM INTERFACE
+  let id_aux [who] of [capasup] of [capasup] of capasup
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adpvfs
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIOI_PVFS2_init()" funciones_tiempos
+    abrir_times capa "ADIOI_PVFS2_Init"
+    escribir_output
+    die
+  ]
+  show "enviar solicitud OPEN a capa SYSTEM INTERFACE"
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adpvfs
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIOI_PVFS2_Open()" funciones_tiempos
+    abrir_times capa "ADIOI_PVFS2_Open"
+    escribir_output
+    die
+  ]
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adpvfs
+    set funciones_tiempos []
+    set funciones_tiempos lput "fake_and_open()" funciones_tiempos
+    abrir_times capa "fake_and_open"
+    escribir_output
+    die
+  ]
+  let id who
+  ;set capainf one-of system_interfaces
+  ask capainf[
+    envio_solicitud (list id who "open" )]
+  ;;Transicion a ESTADO PROCESANDO OPERACION AD_PVFS OPEN
+  set estado task procesando_operacion_ad_pvfs_open
+end 
+
+;;ESTADO PROCESANDO OPERACION AD_PVFS OPEN
+to procesando_operacion_ad_pvfs_open
+  ;;Espero la respuesta del procesamiento de la solicitud OPEN
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta open a ADIO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask adio item 0 solicitud_procesando[
+      envio_respuesta (list id respuesta)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_ad_pvfs
+  ]
+end
+
+;;ESTADO TRATAR READ
+to tratar_ad_pvfs_read
+  ;;Se procede a enviar una solicitud READ a la capa SYSTEM INTERFACE
+  show "enviar solicitud READ a capa SYSTEM INTERFACE"
+  let id_aux [who] of [capasup] of [capasup] of capasup
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adpvfs
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIOI_PVFS2_ReadContig()" funciones_tiempos
+    abrir_times capa "ADIOI_PVFS2_ReadContig"
+    escribir_output
+    die
+  ]
+  let id who
+  ;set capainf one-of system_interfaces
+  ask capainf[
+    envio_solicitud (list id who "read")]
+  ;;Transicion a ESTADO ESPERAR RESPUESTA
+  set estado task procesando_operacion_ad_pvfs_read
+end 
+
+;;ESTADO PROCESANDO OPERACION AD_PVFS READ
+to procesando_operacion_ad_pvfs_read
+  ;;Espero la respuesta del procesamiento de la solicitud READ
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta read a ADIO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask adio item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_ad_pvfs
+  ] 
+end
+
+;;ESTADO TRATAR WRITE
+to tratar_ad_pvfs_write
+  ;;Se procede a enviar una solicitud WRITE a la capa SYSTEM INTERFACE
+  show "enviar solicitud WRITE a capa SYSTEM INTERFACE"
+  let id_aux [who] of [capasup] of [capasup] of capasup
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adpvfs
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIOI_PVFS2_WriteContig()" funciones_tiempos
+    abrir_times capa "ADIOI_PVFS2_WriteContig"
+    escribir_output
+    die
+  ]
+  let id who
+  ;set capainf one-of system_interfaces
+  ask capainf[
+    envio_solicitud (list id who "write")]
+  ;;Transicion a ESTADO PROCESANDO OPERACION AD_PVFS WRITE
+  set estado task procesando_operacion_ad_pvfs_write
+end 
+
+;;ESTADO PROCESANDO OPERACION AD_PVFS WRITE
+to procesando_operacion_ad_pvfs_write
+  ;;Espero la respuesta del procesamiento de la solicitud WRITE
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta write a ADIO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask adio item 0 solicitud_procesando[
+      envio_respuesta (list id respuesta)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_ad_pvfs
+  ]
+end
+
+;;ESTADO TRATAR CLOSE
+to tratar_ad_pvfs_close
+  show "realizando operacion CLOSE"
+ ; let id_aux item 3 solicitud_procesando
+  let id_aux [who] of [capasup] of [capasup] of capasup
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adpvfs
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIOI_PVFS2_Close()" funciones_tiempos
+    abrir_times capa "ADIOI_PVFS2_Close"
+    escribir_output
+    die
+  ]
+  set estado task procesando_operacion_ad_pvfs_close
+end 
+
+;;ESTADO PROCESANDO OPERACION AD_PVFS CLOSE
+to procesando_operacion_ad_pvfs_close 
+    set color sky
+    show "enviar respuesta CLOSE a ADIO"
+    let id who
+    ask adio item 0 solicitud_procesando[
+      envio_respuesta (list id true)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_ad_pvfs
+  ;]
+end
+
+;;ESTADO TRATAR FLUSH
+to tratar_ad_pvfs_flush
+  ;;Se procede a enviar una solicitud FLUSH a la capa SYSTEM INTERFACE
+  show "enviar solicitud FLUSH a capa SYSTEM INTERFACE"
+  ;hatch-datas 1[
+  ;  set capa desc_adpvfs
+  ;  set funciones_tiempos []
+  ;  set funciones_tiempos lput "ADIOI_PVFS2_Flush()" funciones_tiempos
+  ;  escribir_output
+  ;  die
+  ;]
+  let tipo_flush item 2 solicitud_procesando 
+  let id who
+  ;set capainf one-of system_interfaces
+  ask capainf[
+    envio_solicitud (list id who tipo_flush)]
+  ;;Transicion a ESTADO PROCESANDO OPERACION AD_PVFS FLUSH
+  set estado task procesando_operacion_ad_pvfs_flush
+end 
+
+;;ESTADO PROCESANDO OPERACION AD_PVFS FLUSH
+to procesando_operacion_ad_pvfs_flush
+  ;;Espero la respuesta del procesamiento de la solicitud FLUSH
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta FLUSH a ADIO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask adio item 0 solicitud_procesando[
+      envio_respuesta (list id respuesta)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_ad_pvfs
+  ]
+end

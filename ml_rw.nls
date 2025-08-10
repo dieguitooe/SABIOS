@@ -1,0 +1,153 @@
+;;;;;;;;;;;
+;;PROCESA SOLICITUD CLIENTE READ O WRITE
+
+
+;;Maquina de Estados
+
+
+;;io_send_ack
+to procesar_solicitud_cliente
+  show "procesar solicitud"
+  
+  let aux [nodo_id] of main_loop mainloop
+  hatch-datas 1[
+      set id_app aux
+      set capa desc_ml
+      set funciones_tiempos []
+      set funciones_tiempos lput "io_send_ack()" funciones_tiempos
+      abrir_times capa "io_send_ack"
+      escribir_output
+      die
+   ]
+  set color orange
+  ifelse(exists_file? = true)[
+    set ack? true
+  ]
+  [
+    set ack? false
+  ]
+  let bmi_cliente id_bmi_cliente
+  ;show bmi_cliente
+  let identificacion id_mjs
+  show "enviar solicitud envio a capa JOB"
+  let id who
+  ;show id 
+  let num_ope 1
+  let info ack?
+  ask capainf_j[
+    envio_solicitud (list id num_ope "send" bmi_cliente identificacion "inmediato" info)]
+  set color 74
+  set estado task esperar_confirmacion_envio_ack
+end
+
+to esperar_confirmacion_envio_ack
+  ;show "esperar confirmacion envio ack"
+   let id_capainf_j [who] of capainf_j
+  let respuesta respuesta_id_num_operacion id_capainf_j 1
+  if(empty? respuesta = false) [ 
+    if(item 2 first respuesta = 1)[
+      if(ack? = false)[
+        set estado task finalizacion_operacion_rw
+      ]
+      if(ack? = true)[
+        set estado task configurar_flujo
+      ]
+    ]
+  ]
+end
+
+;;io_start_flow
+to configurar_flujo
+    set color orange
+    show "enviar solicitud job_flow a capa JOB"
+    let bmi_cliente id_bmi_cliente
+    let identificacion id_mjs
+    let id who
+    let operacion_ operacion_rw
+    let num_ope 2
+    ask capainf_j[
+      envio_solicitud (list id num_ope operacion_ bmi_cliente identificacion)]
+    set estado task esperar_configuracion
+     set color 74
+end
+
+to esperar_configuracion
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 2
+  if(empty? respuesta = false) [ 
+    set color orange
+    if(item 2 first respuesta = 1)[
+      show "Flow configurado comienzo de transferencia"
+      let aux [nodo_id] of main_loop mainloop
+      hatch-datas 1[
+        set id_app aux
+        set capa desc_ml
+        set funciones_tiempos []
+        set funciones_tiempos lput "io_start_flow()" funciones_tiempos
+        abrir_times capa "io_start_flow"
+        escribir_output
+        die
+      ]
+      set estado task operacion_transferencia
+    ]
+  ]
+end
+
+to operacion_transferencia
+  ;;Verificar si el job que gestiona la transferencia se completo (item 1 = 1)
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 2
+  if(empty? respuesta = false) [ 
+    set color orange
+    if(item 2 first respuesta = 1)[
+      set estado task verificar_flujo
+    ]
+  ]
+end 
+
+to verificar_flujo
+  ;;Verificar flujo en el caso de que sea comando Write, enviar ack 
+  let bmi_cliente id_bmi_cliente
+  let identificacion id_mjs
+  set color orange
+  if(operacion_rw = "write")[
+    let id who 
+    let num_ope 3
+    ask capainf_j[
+      envio_solicitud (list id num_ope "send" bmi_cliente identificacion "inmediato" "")]
+    set estado task esperar_verificacion_ml
+  ]
+  if(operacion_rw = "read")[
+    show "operacion rw realizada"
+    let aux [nodo_id] of main_loop mainloop
+    hatch-datas 1[
+      set id_app aux
+      set capa desc_ml
+      set funciones_tiempos []
+      set funciones_tiempos lput "io_send_completion_ack()" funciones_tiempos
+      abrir_times capa "io_send_completion_ack"
+      escribir_output
+      die
+   ]
+    set estado task finalizacion_operacion_rw 
+  ]
+  set color 74
+end 
+
+to esperar_verificacion_ml
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 3
+  if(empty? respuesta = false) [ 
+    set color orange
+    if(item 2 first respuesta = 1)[
+      ;;job completo
+      show "operacion rw realizada"
+      set estado task finalizacion_operacion_rw
+    ]
+  ]
+end
+
+to finalizacion_operacion_rw
+  set color orange
+  ask turtle mainloop[
+    set color violet + 1]
+  die
+  set color 74
+end 

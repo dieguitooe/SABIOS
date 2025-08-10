@@ -1,0 +1,122 @@
+;;;;;;;;;;;
+;PVFS OPEN;
+;;;;;;;;;;;
+
+
+;;Maquina de Estados
+
+to obtener_atributos_open
+  set color orange
+  ;;Verifico si existen datos en acache sino lectura en 
+  ifelse(data_in_system = "In_cache")[
+    set estado task resolver_apertura
+  ]
+  [   
+    ;;gestionar la creacion de la maquina de estados encargada de la busqueda de atributos
+    let id who
+    ;let tipo_operacion operacion
+    let id_job capainf_j
+    let bmi id_bmi_servidor
+    hatch-pvfs_getattrs 1 [
+      set id_me_solicitud id
+      set capainf_j id_job
+      set id_bmi_servidor bmi
+      set estado task solicitar_metadatos
+      set solicitud_recv_enviada? false
+      set solicitud_send_enviada? false
+      set shape "circle"
+      set size 0.8
+      setxy [xcor] of turtle id_me_solicitud - 1 [ycor] of turtle id_me_solicitud
+      let num who
+      ask pvfs_open id_me_solicitud[
+        set id_me_getattr num]
+    ]
+    set estado task esperar_atributos_servidor
+  ]
+  set color 74
+  ;hatch-datas 1[
+  ;    set capa desc_sysface
+  ;    set funciones_tiempos []
+  ;    set funciones_tiempos lput "pvfs2_sys_getattr()" funciones_tiempos
+  ;    escribir_output
+  ;    die
+  ;  ]
+end
+
+to esperar_atributos_servidor
+  set color orange
+  let respuesta respuesta_id id_me_getattr
+  if(empty? respuesta = false) [
+    if(item 1 first respuesta = 0)[
+       set cod_error_operacion 1
+      show "respuesta positiva resolver apertura"
+      set estado task resolver_apertura
+    ]
+    if(item 1 first respuesta = 1)[ 
+       set cod_error_operacion -1
+      show "respuesta negativa finalizar operacion"
+      set estado task finalizar_operacion_open
+    ]
+  ]
+  set color 74
+end
+;;ESTADO RESOLVER APERTURA
+to resolver_apertura
+  set color orange
+  let creacion? true
+  if(creacion? = true)[
+    ;;enviar solicitud creacion a servidor
+    set color orange
+    let id who
+    ;let tipo_operacion operacion
+    let bmi_servidor id_bmi_servidor
+    ;let identificacion who
+    if(solicitud_recv_enviada? = false)[
+      show "enviar solicitud RECV a capa JOB"
+      ask capainf_j[
+        envio_solicitud (list id 1 "receive" bmi_servidor "no inmediato" )]
+      set solicitud_recv_enviada? true
+    ]
+    if(solicitud_recv_enviada? = true and solicitud_send_enviada? = false)[
+      let respuesta respuesta_id_num_operacion [who] of capainf_j 1 
+      if(empty? respuesta = false) [
+        show "enviar solicitud SEND a capa capa JOB"
+        ;show "ACA SE ENVIA OPEN-CREATION"
+        ask capainf_j[
+          envio_solicitud (list id 2 "send" bmi_servidor "inesperado" "open-creation")]
+        set solicitud_send_enviada? true
+      ]
+    ]
+    if(solicitud_recv_enviada? = true and solicitud_send_enviada? = true)[ 
+      let respuesta respuesta_id_num_operacion [who] of capainf_j 2
+      if(empty? respuesta = false) [
+        if(item 2 first respuesta = 1)[
+          set estado task esperar_apertura
+        ]
+      ]
+    ]
+    set color 74   
+    
+  ]
+end
+
+to esperar_apertura
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 1
+  if(empty? respuesta = false) [
+    if(item 2 first respuesta = 1)[
+      set estado task finalizar_operacion_open
+    ]
+  ]
+  
+end
+;;ESTADO FINALIZAR OPERACION
+to finalizar_operacion_open
+  set color orange
+  let id id_system
+  let cod_error  cod_error_operacion
+  ask ad_pvfs id_capasup[
+    envio_respuesta (list id cod_error)]
+   ask turtle id_system[ set color green + 1]
+  die
+  set color 74
+end

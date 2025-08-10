@@ -1,0 +1,246 @@
+__includes ["data.nls"]
+;;;;;;;;;;;;;;;
+;;;APLICACION;;
+;;;;;;;;;;;;;;;
+
+globals [desc]
+;;MAQUINA DE ESTADOS APP 
+
+
+;;ESTADO ESPERAR
+to esperar_app
+  set desc descripcion
+  ;;Verifico si existen solicitudes entrantes
+  ifelse(num_solicitudes > 0)[
+    set color red - 1
+    print "************-************"
+    ifelse(type_command = "random")[
+      set operacion_app one-of["read" "write" "open" "close"] ;"flush_bstream" "flush_keyval"]
+      set type_command operacion_app
+    ]
+    [
+      set operacion_app type_command
+    ]
+    set num_solicitudes  num_solicitudes - 1
+    show "Solicitud Cliente"
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_app
+  ]
+  [
+    set finalizo? true 
+    
+  ]
+  ;;set color blue
+end
+
+;;ESTADO DECODIFICAR
+to decodificar_app
+  
+  ;;Determina el tipo de operacion a tratar y transiciono al estado correspondiente
+  show "decodificar operacion"
+  if(operacion_app = "open")[
+    set estado task tratar_open_app]
+  if(operacion_app = "close")[
+    set estado task tratar_close_app]
+  if(operacion_app = "write")[
+    set estado task tratar_write_app]
+  if(operacion_app = "read")[
+    set estado task tratar_read_app]
+  if(operacion_app = "close")[
+    set estado task tratar_close_app]
+  if(operacion_app = "flush_bstream" ) or (operacion_app = "flush_keyval")[
+    set estado task tratar_flush_app]
+end
+
+;;ESTADO TRATAR OPEN
+to tratar_open_app
+  ;;Se procede a enviar una solicitud OPEN a la capa MPI-IO
+  ;;Se resetea el temporizador
+  show "enviar comando OPEN a capa MPI-IO"
+  hatch-datas 1[
+    set id_app [who] of myself
+    set capa desc
+    set funciones_tiempos []
+    set funciones_tiempos lput "IOR_Open_MPIIO()" funciones_tiempos
+    abrir_times desc "IOR_Open_MPIIO"
+    escribir_output
+    die
+  ]
+  let id who 
+  ask capainf[ 
+    envio_solicitud (list id who "open" "pvfs")
+  ]
+  reset-timer
+  ;;Transicion a ESTADO ESPERAR RESPUESTA OPEN
+  set estado task esperar_respuesta_open
+end 
+
+;;ESTADO ESPERAR RESPUESTA OPEN
+to esperar_respuesta_open
+  ;;Espero la respuesta del procesamiento de la solicitud OPEN
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [  
+    set color red + 1
+    show "operacion realizada"
+    procesamiento_respuesta_app
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_app 
+  ] 
+   ;set color blue   
+end
+
+;;ESTADO TRATAR CLOSE la app envia a cliente y esperar respuesta
+to tratar_close_app
+  ;;Se procede a enviar una solicitud CLOSE a la capa MPI-IO
+  ;;Se resetea el temporizador
+  show "enviar comando CLOSE a capa MPI-IO"
+  hatch-datas 1[
+    set id_app [who] of myself
+    set capa desc
+    set funciones_tiempos []
+    set funciones_tiempos lput "IOR_Close_MPIIO()" funciones_tiempos
+    abrir_times desc "IOR_Close_MPIIO"
+    escribir_output
+    die
+  ]
+  let id who
+  ask capainf[ 
+      envio_solicitud (list id who "close" "pvfs" )]
+  reset-timer
+  ;;Transicion a ESTADO ESPERAR RESPUESTA
+  hatch-datas 1[
+    set id_app [who] of myself
+    set capa desc
+    set funciones_tiempos []
+    set funciones_tiempos lput "IOR_GetFileSize_MPIIO()" funciones_tiempos
+    abrir_times desc "IOR_GetFileSize_MPIIO"
+    escribir_output
+    die
+  ]
+  set estado task esperar_respuesta_close
+end 
+
+
+;;ESTADO ESPERAR RESPUESTA CLOSE
+to esperar_respuesta_close
+  ;;Espero la respuesta del procesamiento de la solicitud CLOSE
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color red + 1
+    show "operacion realizada"
+    procesamiento_respuesta_app
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_app 
+  ]
+  ;set color blue  
+end
+
+;;ESTADO TRATAR WRITE la app envia a cliente y esperar respuesta
+to tratar_write_app
+  ;;Se procede a enviar una solicitud WRITE a la capa MPI-IO
+  ;;Se resetea el temporizador
+  show "enviar comando WRITE a capa MPI-IO "
+  hatch-datas 1[
+    set id_app [who] of myself
+    set capa desc
+    set funciones_tiempos []
+    set funciones_tiempos lput "IOR_xfer_MPIIO(write)" funciones_tiempos
+    abrir_times desc "IOR_Xfer_MPIIO_write"
+    escribir_output
+    die
+  ]
+  let id who
+  ask capainf[ 
+    envio_solicitud (list id who "write" "pvfs")
+  ]
+  reset-timer
+  ;;Transicion a ESTADO ESPERAR RESPUESTA
+  set estado task esperar_respuesta_write
+end 
+
+;;ESTADO ESPERAR RESPUESTA WRITE 
+to esperar_respuesta_write
+  ;;Espero la respuesta del procesamiento de la solicitud WRITE
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color red + 1
+    show "operacion realizada"
+    procesamiento_respuesta_app
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_app 
+  ]
+end
+
+;;ESTADO TRATAR READ 
+to tratar_read_app
+  ;;Se procede a enviar una solicitud READ a la capa MPI-IO
+  ;;Se resetea el temporizador
+  show "enviar comando READ a capa MPI-IO "
+  hatch-datas 1[
+    set id_app [who] of myself
+    set capa desc
+    set funciones_tiempos []
+    set funciones_tiempos lput "IOR_xfer_MPIIO(read)" funciones_tiempos
+    abrir_times desc "IOR_Xfer_MPIIO_read"
+    escribir_output
+    die
+  ]
+  let id who
+  ask capainf[ 
+     envio_solicitud (list id who "read" "pvfs")]
+  reset-timer
+  ;;Transicion a ESTADO ESPERAR RESPUESTA
+  set estado task esperar_respuesta_read
+end 
+
+;;ESTADO ESPERAR RESPUESTA READ
+to esperar_respuesta_read
+  ;;Espero la respuesta del procesamiento de la solicitud READ
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color red + 1
+    show "operacion realizada"
+    procesamiento_respuesta_app
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_app 
+  ] 
+end
+
+;;ESTADO TRATAR FLUSH 
+to tratar_flush_app
+  ;;Se procede a enviar una solicitud FLUSH a la capa MPI-IO
+  ;;Se resetea el temporizador
+  show "enviar comando FLUSH a capa MPI-IO"
+  ;hatch-datas 1[
+  ;  set capa desc
+  ;  set funciones_tiempos []
+  ;  set funciones_tiempos lput "IOR_Fsync_MPIIO" funciones_tiempos
+  ;  escribir_output
+  ;  die
+  ;]
+  let id who
+  let operacion operacion_app
+  ask capainf[ 
+     envio_solicitud (list id who operacion "pvfs")]
+  reset-timer
+  ;;Transicion a ESTADO ESPERAR RESPUESTA
+  set estado task esperar_respuesta_flush
+end 
+
+;;ESTADO ESPERAR RESPUESTA FLUSH
+to esperar_respuesta_flush
+  ;;Espero la respuesta del procesamiento de la solicitud FLUSH
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color red + 1
+    show "operacion realizada"
+    procesamiento_respuesta_app
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_app 
+  ] 
+end
+
+;;recibe respuesta del sistema de archivos
+to procesamiento_respuesta_app
+  guardar_mensaje_respuesta_archivo
+end

@@ -1,0 +1,332 @@
+__includes["data.nls"]
+
+globals[desc_trove]
+;;;;;;;;;
+;;TROVE;;
+;;;;;;;;;
+
+;;buffer trove [id_origen num_operacion operacion id_job funcion callback cod_pub]
+
+;;ESTADO ESPERAR
+to esperar_trove 
+  ;set desc_trove descripcion
+  set desc_trove "TROVE"
+  ;;Verifico si existen solicitudes entrantes
+  if(length solicitudes > 0)[
+    ;;Transicion a ESTADO DECODIFICAR
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    set estado task decodificar_trove
+  ]
+end
+
+
+to decodificar_trove
+  ;;Determina el tipo de operacion a tratar y transiciona al estado correspondiente
+  let operacion item 2 solicitud_procesando
+  if(operacion = "read")[
+           set color violet
+    set estado task tratar_trove_read]
+  if(operacion = "write")[
+           set color violet
+    set estado task tratar_trove_write]
+  if(operacion = "read_keyval")[
+           set color violet
+    set estado task tratar_trove_read_metadatos]
+  if(operacion = "write_keyval")[
+           set color violet
+    set estado task tratar_trove_write_metadatos]
+  if(operacion = "acceso_read_disco")[
+           set color violet
+    set estado task operacion_read_disco]
+  if(operacion = "acceso_write_disco")[
+           set color violet
+    set estado task operacion_write_disco]
+  if(operacion = "test")[
+    set estado task verificar_operaciones_trove]
+  if(operacion = "flush_keyval")[
+    set estado task tratar_trove_flush_keyval]
+  if(operacion = "flush_bstream")[
+    set estado task tratar_trove_flush_bstream]
+end
+
+to tratar_trove_read
+  set nodo_id [nodo_id] of [capasup] of capasup_j
+  let id_aux nodo_id
+  ;show nodo_id
+  hatch-datas 1[
+        set id_app id_aux
+        set capa desc_trove
+        set funciones_tiempos []
+        set funciones_tiempos lput "dbpf_bstream_read_list()" funciones_tiempos
+        abrir_times capa "dbpf_bstream_read_list"
+        escribir_output
+        die
+   ]
+  set estado task operacion_rw_disco
+end
+
+to tratar_trove_write
+  set nodo_id [nodo_id] of [capasup] of capasup_j
+  let id_aux nodo_id
+  ;show nodo_id
+  hatch-datas 1[
+        set id_app id_aux
+        set capa desc_trove
+        set funciones_tiempos []
+        set funciones_tiempos lput "dbpf_bstream_write_list()" funciones_tiempos
+        abrir_times capa "dbpf_bstream_write_list"
+        escribir_output
+        die
+   ]
+  set estado task operacion_rw_disco
+end
+
+to tratar_trove_flush_bstream
+;  hatch-datas 1[
+;        set capa desc_trove
+;        set funciones_tiempos []
+;        set funciones_tiempos lput "dbpf_bstream_flush()" funciones_tiempos
+;        escribir_output
+;        die
+;   ]
+  set estado task operacion_flush_disco
+end
+
+to tratar_trove_flush_keyval
+  ;hatch-datas 1[
+  ;      set capa desc_trove
+  ;      set funciones_tiempos []
+  ;      set funciones_tiempos lput "dbpf_keyval_flush()" funciones_tiempos
+  ;      escribir_output
+  ;      die
+  ; ]
+  set estado task operacion_flush_disco
+end
+
+to operacion_flush_disco
+    ;;Se lleva a cabo la operacion en agente DISCO
+  ;;Devuelve la respuesta a capa FLOW
+  ;id num_ope operacion id_job callback info_estado
+  let id who
+  let num_ope_flow item 5 solicitud_procesando
+  let operacion item 2 solicitud_procesando
+  let id_job item 1 solicitud_procesando
+  let callback item 3 solicitud_procesando
+  ;hatch-datas 1[
+  ;      set capa desc_trove
+  ;      set funciones_tiempos []
+  ;      set funciones_tiempos lput (word "dbpf_" remove "flush_ " operacion "_flush_op_svc()") funciones_tiempos
+  ;      escribir_output
+  ;      die
+  ; ]
+  show "envio respuesta FLUSH a capa FLOW"
+  ask capasup_f[
+    envio_respuesta (list id num_ope_flow 1)]
+  let id_capasup_f [who] of capasup_f
+  agregar_operacion_trove_buffer id_capasup_f id operacion id_job callback 1
+  set estado task esperar_trove
+  set color violet + 1
+end
+
+to operacion_rw_disco
+  ;;Se lleva a cabo la operacion en agente DISCO
+  ;;Devuelve la respuesta a capa FLOW
+  ;id num_ope operacion id_job callback info_estado
+  let id who
+  let num_ope_flow item 5 solicitud_procesando
+  let operacion item 2 solicitud_procesando
+  let id_job item 1 solicitud_procesando
+  let callback item 3 solicitud_procesando
+  show "envio respuesta rw a capa FLOW"
+  set nodo_id [nodo_id] of [capasup] of capasup_j
+  let id_aux nodo_id
+  ;show nodo_id
+  hatch-datas 1[
+        set id_app id_aux
+        set capa desc_trove
+        set funciones_tiempos []
+        set funciones_tiempos lput "issue_or_delay_io_operation()" funciones_tiempos
+        abrir_times capa "issue_or_delay_io_operation"
+        escribir_output
+        die
+   ]
+  ask capasup_f[
+    envio_respuesta (list id num_ope_flow 1)]
+  let id_capasup_f [who] of capasup_f
+  agregar_operacion_trove_buffer id_capasup_f id operacion id_job callback 1
+  set estado task esperar_trove
+  set color violet + 1
+end
+
+to tratar_trove_read_metadatos
+  set nodo_id [nodo_id] of [capasup] of capasup_j
+  let id_aux nodo_id
+  ;show nodo_id
+  hatch-datas 1[
+        set id_app id_aux
+        set capa desc_trove
+        set funciones_tiempos []
+        set funciones_tiempos lput "dbpf_keyval_read_list()" funciones_tiempos
+        abrir_times capa "dbpf_keyval_read_list"
+        escribir_output
+        die
+   ]
+  set estado task configurar_estructura_datos
+end
+
+to tratar_trove_write_metadatos
+  set nodo_id [nodo_id] of [capasup] of capasup_j
+  let id_aux nodo_id
+  ;show nodo_id
+  hatch-datas 1[
+        set id_app id_aux
+        set capa desc_trove
+        set funciones_tiempos []
+        set funciones_tiempos lput "dbpf_keyval_write_list()" funciones_tiempos
+        abrir_times capa "dbpf_keyval_write_list"
+        escribir_output
+        die
+   ]
+  set estado task configurar_estructura_datos
+end
+
+to configurar_estructura_datos
+  show "configurar estructura"
+  let operacion item 2 solicitud_procesando
+  let tipo_requerimiento item 4 solicitud_procesando
+  ifelse(tipo_requerimiento = "inmediato")[
+    if( operacion = "read_keyval")[
+      set estado task operacion_read_disco
+      set comunicar_operacion_read_trove? true
+    ]
+    if( operacion = "write_keyval")[
+      set estado task operacion_write_disco
+      set comunicar_operacion_write_trove? true
+    ]
+  ]
+  [
+    ;;sino encolar
+    let num_ope who
+    let id_job item 1 solicitud_procesando
+    let callback item 3 solicitud_procesando
+    let id_s who
+    ask capasup_j[
+      envio_respuesta (list id_s id_job 0)]
+    ;id_flow num_ope "read" id_ope_j "test_send_bmi" "inmediato"
+    ;id num_ope operacion id_job callback info_estado
+    let id_capasup_j [who] of capasup_j
+    agregar_operacion_trove_buffer id_capasup_j num_ope operacion id_job callback 0
+    set estado task esperar_trove
+    set color violet + 1
+  ]
+end
+
+to operacion_read_disco
+  ;;Se lleva a cabo la operacion sobre disco
+  ifelse(comunicar_operacion_read_trove? = true)[
+    set nodo_id [nodo_id] of [capasup] of capasup_j
+    let id_aux nodo_id
+    ;show nodo_id
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_trove
+        set funciones_tiempos []
+        set funciones_tiempos lput "dbpf_keyval_read_list_op_svc()" funciones_tiempos
+        abrir_times capa "dbpf_keyval_read_list_op_svc"
+        escribir_output
+        die
+   ]
+    show "envio confirmacion de operacion realizada a capa JOB"
+    let id_so who
+    let num_ope item 1 solicitud_procesando
+    ask capasup_j[
+      envio_respuesta (list id_so num_ope 1)]
+    set estado task esperar_trove
+    set comunicar_operacion_read_trove? false
+  ]
+  [
+    let info_ope_bmi first filter[item 1 ? = num_operacion_procesando] buffer
+    let posicion position info_ope_bmi buffer
+    set info_ope_bmi replace-item 5 info_ope_bmi  1
+    set buffer replace-item posicion buffer info_ope_bmi 
+    set estado task esperar_trove
+  ]
+  set color violet + 1
+end
+
+to operacion_write_disco
+  ;;Se lleva a cabo la operacion disco
+  ifelse( comunicar_operacion_write_trove? = true)[
+    let id_so who
+    set nodo_id [nodo_id] of [capasup] of capasup_j
+    let id_aux nodo_id
+    ;show nodo_id
+    hatch-datas 1[
+        set id_app id_aux
+        set capa desc_trove
+        set funciones_tiempos []
+        set funciones_tiempos lput "dbpf_write_list_op_svc()" funciones_tiempos
+        abrir_times capa "dbpf_write_list_op_svc"
+        escribir_output
+        die
+   ]
+    show "envio confirmacion de operacion realizada a capa JOB"
+    let num_ope item 1 solicitud_procesando
+    ask capasup_j[
+      envio_respuesta (list id_so num_ope 1)]
+    set estado task esperar_trove
+    set  comunicar_operacion_write_trove? false
+  ]
+  [
+    let info_ope_bmi first filter[item 1 ? = num_operacion_procesando] buffer
+    let posicion position info_ope_bmi buffer
+    set info_ope_bmi replace-item 5 info_ope_bmi  1
+    set buffer replace-item posicion buffer info_ope_bmi
+    set estado task esperar_trove
+  ]
+  set color violet + 1
+end
+
+
+to verificar_operaciones_trove
+  ;;Verificar si se han completado operaciones trove
+  let id who
+  let num_ope item 1 solicitud_procesando
+  let lista_operaciones_completas filter [item 5 ? = 1] buffer
+  ifelse(length lista_operaciones_completas > 0)[
+    show "comunico a JOB de operaciones trove completas"
+    ask capasup_j[
+      envio_respuesta (list id num_ope lista_operaciones_completas) ]
+    foreach lista_operaciones_completas[
+      set buffer remove ? buffer
+    ]
+  ]
+  [
+    ask capasup_j[
+      envio_respuesta (list id num_ope false)
+    ]
+  ]
+  ;; A continuacion, verifico si existe operaciones incompletas que se puedan completar
+  let lista_operaciones_incompletas filter [item 5 ? = 0] buffer
+  ifelse(length lista_operaciones_incompletas > 0)[
+    let operacion_incompleta first lista_operaciones_incompletas
+    let operacion_ item 2 operacion_incompleta
+    set num_operacion_procesando item 1 operacion_incompleta
+    if(operacion_ = "read_keyval")[
+      set estado task operacion_read_disco
+    ]
+    if(operacion_ = "write_keyval")[
+      set estado task operacion_write_disco
+    ]
+  ]
+  [
+    set estado task esperar_trove
+  ]
+end
+
+;;;añadir operacion trove a buffer
+to agregar_operacion_trove_buffer [id num_ope operacion_ id_job callback info_estado]
+  let nueva_operacion_trove (list id num_ope operacion_ id_job callback info_estado)
+  set buffer lput nueva_operacion_trove buffer
+end

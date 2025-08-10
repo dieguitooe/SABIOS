@@ -1,0 +1,250 @@
+__includes["data.nls"]
+
+globals[desc_adio]
+;;;;;;;;;;
+;;;ADIO;;;
+;;;;;;;;;;
+
+
+;;ESTADO ESPERAR
+to esperar_adio
+  ;;Verifico si existen solicitud entrante
+  set desc_adio descripcion
+  if(length solicitudes > 0)[
+    set color blue
+    set solicitud_procesando first solicitudes
+    set solicitudes remove-item 0 solicitudes
+    ;;Transicion a ESTADO DECODIFICAR
+    set estado task decodificar_sistema_adio
+  ]
+end
+
+
+;;ESTADO DECODIFICAR
+to decodificar_sistema_adio
+  ;;Determina el tipo de operacion a tratar y transiciona al estado correspondiente
+  show "decodificar sistema"
+  let sistema item 3 solicitud_procesando
+  if(sistema = "pvfs")[
+    show "sistema PVFS"
+    set estado task decodificar_adio]
+end
+
+;;ESTADO DECODIFICAR
+to decodificar_adio
+  ;;Determina el tipo de operacion a tratar y transiciona al estado correspondiente
+  show "decodificar operacion"
+  let operacion item 2 solicitud_procesando
+  if(operacion = "open")[
+    set estado task tratar_adio_open]
+  if(operacion = "write")[
+    set estado task tratar_adio_write]
+  if(operacion = "read")[
+    set estado task tratar_adio_read]
+  if(operacion = "close")[
+    set estado task tratar_adio_close]
+  if(operacion = "flush_bstream" ) or (operacion = "flush_keyval")[
+    set estado task tratar_adio_flush]
+end
+  
+
+;;ESTADO TRATAR OPEN
+to tratar_adio_open
+  ;;Se procede a enviar una solicitud OPEN a la capa AD_PVFS
+  
+  show "enviar solicitud OPEN a capa AD_PVFS"
+  let id_aux [who] of [capasup] of capasup
+  ;let id_test [who] of id_aux
+  ;show id_aux
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adio
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIO_Open()" funciones_tiempos
+    abrir_times capa "ADIO_Open"
+    escribir_output
+    die
+  ]
+  hatch-datas 1[
+    set id_app id_aux
+    set capa desc_adio
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIOI_SCALEABLE_Opencoll()" funciones_tiempos
+    abrir_times capa "ADIOI_SCALEABLE_OpenColl"
+    escribir_output
+    die
+  ]
+  let id who
+  ask capainf[
+    envio_solicitud (list id who "open")]
+  ;;Transicion a ESTADO PROCESANDO OPERACION ADIO OPEN
+  set estado task procesando_operacion_adio_open
+end 
+
+;;ESTADO PROCESANDO OPERACION ADIO OPEN
+to procesando_operacion_adio_open
+  ;;Espero la respuesta del procesamiento de la solicitud OPEN
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta open a MPI-IO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask mpi_io item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_adio
+    
+  ]
+end
+
+;;ESTADO TRATAR READ
+to tratar_adio_read
+  ;;Se procede a enviar una solicitud READ a la capa AD_PVFS
+  show "enviar solicitud READ a capa AD_PVFS"
+  ;hatch-datas 1[
+  ;  set capa desc_adio
+  ;  set funciones_tiempos []
+  ;  set funciones_tiempos lput "ADIOI_GEN_ReadStridedColl()" funciones_tiempos
+  ;  escribir_output
+  ;  die
+  ;]
+  let id who
+  ask capainf[
+    envio_solicitud (list id who "read")]
+  ;;Transicion a ESTADO ESPERAR RESPUESTA
+  set estado task procesando_operacion_adio_read
+end 
+
+;;ESTADO PROCESANDO OPERACION ADIO READ
+to procesando_operacion_adio_read
+  ;;Espero la respuesta del procesamiento de la solicitud READ
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta read a MPI-IO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask mpi_io item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_adio
+  ]
+end
+
+;;ESTADO TRATAR WRITE
+to tratar_adio_write
+  ;;Se procede a enviar una solicitud WRITE a la capa AD_PVFS
+  show "enviar solicitud WRITE a capa AD_PVFS"
+  ;hatch-datas 1[
+  ;  set capa desc_adio
+  ;  set funciones_tiempos []
+  ;  set funciones_tiempos lput "ADIOI_GEN_WriteStridedColl()" funciones_tiempos
+  ;  escribir_output
+  ;  die
+  ;]
+  let id who
+  ask capainf[
+    envio_solicitud (list id who "write")]
+  ;;Transicion a ESTADO PROCESANDO ADIO WRITE
+  set estado task procesando_operacion_adio_write
+end 
+
+;;ESTADO PROCESANDO OPERACION ADIO WRITE
+to procesando_operacion_adio_write
+  ;;Espero la respuesta del procesamiento de la solicitud WRITE
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta write a MPI-IO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask mpi_io item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_adio
+  ]
+end
+
+;;ESTADO TRATAR CLOSE
+to tratar_adio_close
+  ;;Se procede a enviar una solicitud CLOSE a la capa AD_PVFS
+  show "enviar solicitud CLOSE a capa AD_PVFS"
+  ;let id_aux item 4 solicitud_procesando
+  let id_aux [who] of [capasup] of capasup
+  hatch-datas 1[
+    set id_app id_aux
+    show id_app
+    set capa desc_adio
+    set funciones_tiempos []
+    set funciones_tiempos lput "ADIOI_Close()" funciones_tiempos
+    abrir_times capa "ADIO_Close"
+    escribir_output
+    die
+  ]
+  let id who
+  ask capainf[
+    envio_solicitud (list id who "close")]
+  ;;Transicion a ESTADO PROCESANDO ADIO CLOSE
+  set estado task procesando_operacion_adio_close
+end 
+
+;;ESTADO PROCESANDO OPERACION ADIO CLOSE
+to procesando_operacion_adio_close
+  ;;Espero la respuesta del procesamiento de la solicitud CLOSE
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta CLOSE a MPI-IO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask mpi_io item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_adio
+    ;hatch-datas 1[
+    ;  set capa desc_adio
+    ;  set funciones_tiempos []
+    ;  set funciones_tiempos lput "ADIO_Free()" funciones_tiempos
+    ;  set funciones_tiempos lput "free()" funciones_tiempos
+    ;  escribir_output
+    ;  die
+    ;]
+  ]
+end
+
+
+;;ESTADO TRATAR FLUSH
+to tratar_adio_flush
+  ;;Se procede a enviar una solicitud FLUSH a la capa AD_PVFS
+  show "enviar solicitud FLUSH a capa AD_PVFS"
+  ;hatch-datas 1[
+  ;  set capa desc_adio
+  ;  set funciones_tiempos []
+  ;  set funciones_tiempos lput "ADIOI_Flush()" funciones_tiempos
+  ;  escribir_output
+  ;  die
+  ;]
+  let id who
+  let op item 2 solicitud_procesando
+  ask capainf[
+    envio_solicitud (list id who op)]
+  ;;Transicion a ESTADO PROCESANDO ADIO FLUSH
+  set estado task procesando_operacion_adio_flush
+end 
+
+;;ESTADO PROCESANDO OPERACION ADIO CLOSE
+to procesando_operacion_adio_flush
+  ;;Espero la respuesta del procesamiento de la solicitud FLUSH
+  let respuesta respuesta_id [who] of capainf
+  if(empty? respuesta = false) [ 
+    set color sky
+    show "enviar respuesta FLUSH a MPI-IO"
+    let id who
+    let cod_error item 1 first respuesta
+    ask mpi_io item 0 solicitud_procesando[
+      envio_respuesta (list id cod_error)]
+    ;;Transicion a ESTADO ESPERAR
+    set estado task esperar_adio
+  ]
+end

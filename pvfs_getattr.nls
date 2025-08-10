@@ -1,0 +1,81 @@
+;;;;;;;;;;;;;;;;;;;;
+;PVFS GET ATRIBUTOS;
+;;;;;;;;;;;;;;;;;;;;
+
+
+;;Maquina de Estados
+
+to solicitar_metadatos
+  ;;enviar solicitud metadatos a servidor
+  set color orange
+  let id who
+  ;;let operacion_ operacion
+  ;let bmi_servidor id_bmi_servidor
+  let bmi_servidor [who] of one-of mdt_bmis_servidor
+  ;show bmi_servidor
+  ;;let identificacion who
+  ;hatch-datas 1[
+  ;    set capa desc_sysface
+  ;    set funciones_tiempos []
+  ;    set funciones_tiempos lput "pvfs2_msgairray_sm()" funciones_tiempos
+  ;    escribir_output
+  ;    die
+  ;  ]
+  if(solicitud_recv_enviada? = false)[
+    show "enviar solicitud RECV a capa JOB"
+    ask capainf_j[
+      envio_solicitud (list id 1 "receive" bmi_servidor "no inmediato")]
+    set solicitud_recv_enviada? true
+  ]
+  if(solicitud_recv_enviada? = true and solicitud_send_enviada? = false)[
+    let respuesta respuesta_id_num_operacion [who] of capainf_j 1
+    if(empty? respuesta = false) [
+      show "enviar solicitud SEND a capa capa JOB"
+      ask capainf_j[
+        envio_solicitud (list id 2 "send" bmi_servidor "inesperado" "open-read")]
+      set solicitud_send_enviada? true
+    ]
+  ]
+  if(solicitud_recv_enviada? = true and solicitud_send_enviada? = true)[
+    ;show "ENTRA"
+    let respuesta respuesta_id_num_operacion [who] of capainf_j 2
+    if(empty? respuesta = false) [
+      if(item 2 first respuesta = 1)[
+        set estado task esperar_respuesta_metadatos
+      ]
+    ]
+  ]
+  set color 74   
+end
+
+
+;;ESTADO RESOLVER APERTURA
+to esperar_respuesta_metadatos
+  set color orange
+  let respuesta respuesta_id_num_operacion [who] of capainf_j 1
+  if(empty? respuesta = false) [
+    if(item 2 first respuesta = 1)[
+      ifelse(item 3 first respuesta = true)[
+          set cod_error_operacion 1
+      ]
+      [  set cod_error_operacion 0
+      ]
+      set estado task finalizar_operacion_metadatos
+    ]
+  ]
+  set color 74
+end
+
+
+;;ESTADO FINALIZAR OPERACION
+to finalizar_operacion_metadatos
+  set color orange
+  let id who
+  let cod_error  cod_error_operacion
+  ask turtle id_me_solicitud[
+    envio_respuesta (list id cod_error)]
+  ask turtle id_system[ set color green + 1]
+  show "fin operacion metadatos"
+  set color 74
+  die
+end

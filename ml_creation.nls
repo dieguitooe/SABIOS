@@ -1,0 +1,69 @@
+;;;;;;;;;;;;
+;;CREATION;;
+;;;;;;;;;;;;
+
+;;Maquina de Estados que gestiona la creacion de archivo
+
+to tratar_creacion
+  set color orange
+  let id who
+  show "enviar solicitud keyval write a capa JOB"
+;  hatch-datas 1[
+;      set capa desc_ml
+;      set funciones_tiempos []
+;      set funciones_tiempos lput "pvfs2_create_sm()" funciones_tiempos
+;      abrir_times capa capa
+;      escribir_output
+;      die
+;   ]
+  ;show xcor
+  let aux_id [nodo_id] of [capasup] of capainf_j
+  hatch-datas 1[
+      set id_app aux_id
+      set capa desc_ml
+      set funciones_tiempos []
+      set funciones_tiempos lput "write_keyvals()" funciones_tiempos
+      abrir_times capa "write_keyvals"
+      escribir_output
+      die
+   ]
+  let num_ope 1
+  ask capainf_j[
+    envio_solicitud (list id num_ope "write_keyval" "inmediato")]
+  set estado task esperar_creacion
+  set color 74
+   
+  
+end
+
+to esperar_creacion
+  set color orange
+  let resp respuesta_id_num_operacion [who] of capainf_j 1
+  let id who
+  let bmi_cliente id_bmi_cliente
+  let identificacion id_mjs
+  if(empty? resp = false) [
+    if(item 2 first resp = 1)[
+      show "enviar solicitud send a capa JOB"
+      let num_ope 2
+      ask capainf_j[
+        envio_solicitud (list id num_ope "send" bmi_cliente identificacion "inmediato" "dato")]
+      set estado task finalizar_operacion_creacion
+    ]
+  ]
+  set color 74
+end
+
+
+to finalizar_operacion_creacion
+  let resp respuesta_id_num_operacion [who] of capainf_j 2
+  if(empty? resp = false) [
+    if(item 2 first resp = 1)[
+      show "operacion creacion realizada"
+      set estado task finalizar_operacion_lectura
+      ask turtle mainloop[
+        set color violet + 1]
+      die
+    ]
+  ]
+end 

@@ -1,0 +1,2 @@
+####################### Operacion read 07:48:21.302 PM 11-Aug-2019 ####################
+ "Id proceso" "Nodo" "Capa" "Funcion" "Tiempo";
